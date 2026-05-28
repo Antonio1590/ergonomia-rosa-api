@@ -1,6 +1,6 @@
 fastapi
 uvicorn
-mediapipe==0.10.9
+mediapipe==0.10.35
 opencv-python-headless
 numpy
 pillow
