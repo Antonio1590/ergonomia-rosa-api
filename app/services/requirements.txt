@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+mediapipe==0.10.9
+opencv-python-headless
+numpy
+pillow
+python-multipart
