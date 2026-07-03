@@ -2,6 +2,6 @@ fastapi
 uvicorn
 python-multipart
 pillow
-numpy
-opencv-python-headless
-mediapipe
+numpy<2
+opencv-contrib-python-headless
+mediapipe==0.10.21

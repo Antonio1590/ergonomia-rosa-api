@@ -1,6 +1,8 @@
 import cv2
 import mediapipe as mp
-import numpy as np
+
+from app.services.angle_service import get_body_angles
+from app.services.rosa_service import calculate_rosa
 
 mp_pose = mp.solutions.pose
 
@@ -37,4 +39,20 @@ def detect_pose(image):
 
         })
 
-    return landmarks
+    angles = get_body_angles(
+        landmarks
+    )
+
+    rosa = calculate_rosa(
+        angles
+    )
+
+    return {
+
+        "landmarks": landmarks,
+
+        "angles": angles,
+
+        "rosa": rosa
+
+    }
