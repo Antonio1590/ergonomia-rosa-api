@@ -1,12 +1,13 @@
 from fastapi import FastAPI
-from app.routes.posture import router
+import mediapipe as mp
 
 app = FastAPI()
-
-app.include_router(router)
 
 @app.get("/")
 def root():
     return {
-        "message": "ROSA Expert API funcionando"
+        "mediapipe_version": getattr(mp, "__version__", "Sin versión"),
+        "mediapipe_file": getattr(mp, "__file__", "Desconocido"),
+        "has_solutions": hasattr(mp, "solutions"),
+        "attributes": dir(mp)
     }
