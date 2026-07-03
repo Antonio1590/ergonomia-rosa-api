@@ -1,8 +1,9 @@
 import cv2
 import mediapipe as mp
 
-from app.services.angle_service import get_body_angles
-from app.services.rosa_service import calculate_rosa
+print("MediaPipe:", mp)
+print("Versión:", getattr(mp, "__version__", "Sin versión"))
+print("Contenido:", dir(mp))
 
 mp_pose = mp.solutions.pose
 
