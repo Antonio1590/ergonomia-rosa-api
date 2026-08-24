@@ -1,0 +1,233 @@
+<script>
+// ============================================================
+// JS_Charts — Gráficas en SVG puro, sin librerías externas
+//
+// La paleta de niveles de riesgo está validada para daltonismo
+// (protanopía, deuteranopía, tritanopía) y para visión normal:
+// cada par adyacente supera ΔE 15 en visión plena y ΔE 8 en CVD.
+// No sustituir un color sin volver a validar.
+// ============================================================
+
+var Charts = (function() {
+
+  var RIESGO = {
+    'Bajo':     '#059669',
+    'Medio':    '#CA8A04',
+    'Alto':     '#F43F5E',
+    'Muy Alto': '#9F1239'
+  };
+  var ORDEN_RIESGO = ['Bajo', 'Medio', 'Alto', 'Muy Alto'];
+
+  var TINTA   = '#111827';
+  var TINTA_2 = '#4B5563';
+  var TINTA_3 = '#9CA3AF';
+  var REJILLA = '#E5E7EB';
+  var MARCA   = '#006D32';
+
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, function(c) {
+      return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c];
+    });
+  }
+
+  /* ---------------------------------------------------------
+     Tooltip compartido
+     --------------------------------------------------------- */
+  function tooltip() {
+    var el = document.getElementById('chartTooltip');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'chartTooltip';
+      el.className = 'chart-tooltip';
+      el.hidden = true;
+      document.body.appendChild(el);
+    }
+    return el;
+  }
+
+  function mostrarTip(html, x, y) {
+    var t = tooltip();
+    t.innerHTML = html;
+    t.hidden = false;
+    var r = t.getBoundingClientRect();
+    var izq = Math.min(window.innerWidth - r.width - 8, Math.max(8, x - r.width/2));
+    var arr = y - r.height - 12;
+    if (arr < 8) arr = y + 16;
+    t.style.left = izq + 'px';
+    t.style.top  = arr + 'px';
+  }
+
+  function ocultarTip() { tooltip().hidden = true; }
+
+  /* ---------------------------------------------------------
+     GRÁFICA DE LÍNEA · evolución en el tiempo
+     Una sola serie: el título la nombra, no necesita leyenda.
+     --------------------------------------------------------- */
+  function linea(contenedor, datos, opciones) {
+    var o = opciones || {};
+    var el = typeof contenedor === 'string' ? document.getElementById(contenedor) : contenedor;
+    if (!el) return;
+
+    if (!datos || datos.length === 0) {
+      el.innerHTML = '<p class="chart-empty">Sin datos suficientes para graficar.</p>';
+      return;
+    }
+
+    // Un solo punto no dibuja una tendencia
+    if (datos.length === 1) {
+      el.innerHTML = '<p class="chart-empty">Necesitas al menos dos evaluaciones ' +
+                     'para ver tu evolución.</p>';
+      return;
+    }
+
+    var W = 640, H = 240;
+    var m = { top: 18, right: 16, bottom: 34, left: 34 };
+    var iw = W - m.left - m.right;
+    var ih = H - m.top - m.bottom;
+
+    var maxY = o.maxY || 10;
+    var x = function(i) { return m.left + (datos.length === 1 ? iw/2 : i * iw / (datos.length - 1)); };
+    var y = function(v) { return m.top + ih - (v / maxY) * ih; };
+
+    var svg = [];
+    svg.push('<svg viewBox="0 0 ' + W + ' ' + H + '" class="chart-svg" role="img" ' +
+             'aria-label="' + esc(o.aria || 'Evolución del puntaje') + '">');
+
+    // Rejilla horizontal, recesiva
+    [0, 2, 4, 6, 8, 10].forEach(function(v) {
+      if (v > maxY) return;
+      svg.push('<line x1="' + m.left + '" y1="' + y(v).toFixed(1) +
+               '" x2="' + (W - m.right) + '" y2="' + y(v).toFixed(1) +
+               '" stroke="' + REJILLA + '" stroke-width="1"/>');
+      svg.push('<text x="' + (m.left - 8) + '" y="' + (y(v) + 4).toFixed(1) +
+               '" text-anchor="end" font-size="10" fill="' + TINTA_3 + '">' + v + '</text>');
+    });
+
+    // Umbral de intervención del método ROSA
+    if (o.umbral) {
+      svg.push('<line x1="' + m.left + '" y1="' + y(o.umbral).toFixed(1) +
+               '" x2="' + (W - m.right) + '" y2="' + y(o.umbral).toFixed(1) +
+               '" stroke="#9F1239" stroke-width="1.5" stroke-dasharray="5 4" opacity=".65"/>');
+      svg.push('<text x="' + (W - m.right) + '" y="' + (y(o.umbral) - 6).toFixed(1) +
+               '" text-anchor="end" font-size="9.5" font-weight="700" fill="#9F1239">' +
+               'Umbral de intervención</text>');
+    }
+
+    // Trazo: 2 px, sin suavizado que invente valores
+    var d = datos.map(function(p, i) {
+      return (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(p.valor).toFixed(1);
+    }).join(' ');
+    svg.push('<path d="' + d + '" fill="none" stroke="' + MARCA +
+             '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>');
+
+    // Puntos: color por nivel de riesgo, anillo blanco de 2 px
+    datos.forEach(function(p, i) {
+      var c = RIESGO[p.nivel] || MARCA;
+      svg.push('<circle cx="' + x(i).toFixed(1) + '" cy="' + y(p.valor).toFixed(1) +
+               '" r="5.5" fill="' + c + '" stroke="#fff" stroke-width="2"/>');
+    });
+
+    // Etiqueta directa solo en el último punto: no un número en cada uno
+    var ult = datos.length - 1;
+    svg.push('<text x="' + x(ult).toFixed(1) + '" y="' + (y(datos[ult].valor) - 13).toFixed(1) +
+             '" text-anchor="middle" font-size="12" font-weight="800" fill="' + TINTA + '">' +
+             datos[ult].valor + '</text>');
+
+    // Eje X: primera y última fecha
+    svg.push('<text x="' + m.left + '" y="' + (H - 10) +
+             '" font-size="10" fill="' + TINTA_3 + '">' + esc(datos[0].etiqueta) + '</text>');
+    svg.push('<text x="' + (W - m.right) + '" y="' + (H - 10) +
+             '" text-anchor="end" font-size="10" fill="' + TINTA_3 + '">' +
+             esc(datos[ult].etiqueta) + '</text>');
+
+    // Zonas de contacto: más grandes que el punto
+    datos.forEach(function(p, i) {
+      svg.push('<circle cx="' + x(i).toFixed(1) + '" cy="' + y(p.valor).toFixed(1) +
+               '" r="16" fill="transparent" class="chart-hit" ' +
+               'data-i="' + i + '" style="cursor:pointer"/>');
+    });
+
+    svg.push('</svg>');
+    el.innerHTML = svg.join('');
+
+    el.querySelectorAll('.chart-hit').forEach(function(h) {
+      h.addEventListener('mouseenter', function(ev) {
+        var p = datos[Number(h.dataset.i)];
+        var r = h.getBoundingClientRect();
+        mostrarTip(
+          '<strong>' + esc(p.etiquetaLarga || p.etiqueta) + '</strong>' +
+          '<span class="tip-row"><i style="background:' + (RIESGO[p.nivel]||MARCA) + '"></i>' +
+          'Puntaje ' + p.valor + ' · ' + esc(p.nivel || '') + '</span>',
+          r.left + r.width/2, r.top
+        );
+      });
+      h.addEventListener('mouseleave', ocultarTip);
+    });
+  }
+
+  /* ---------------------------------------------------------
+     BARRAS HORIZONTALES · conteo por categoría
+     Cada barra lleva su etiqueta: el color es redundante.
+     --------------------------------------------------------- */
+  function barras(contenedor, datos, opciones) {
+    var o = opciones || {};
+    var el = typeof contenedor === 'string' ? document.getElementById(contenedor) : contenedor;
+    if (!el) return;
+
+    var total = datos.reduce(function(s, d) { return s + d.valor; }, 0);
+    if (!total) {
+      el.innerHTML = '<p class="chart-empty">Sin datos para mostrar.</p>';
+      return;
+    }
+
+    // El porcentaje sólo tiene sentido cuando las barras son partes de
+    // un total. Para promedios se muestra la escala (p. ej. "de 10").
+    var comoParte = o.comoParte !== false;
+    var escalaMax = o.escalaMax || Math.max.apply(null, datos.map(function(d){ return d.valor; }));
+
+    var filas = datos.map(function(d) {
+      var ancho = escalaMax ? (d.valor / escalaMax * 100) : 0;
+      var porc  = total ? Math.round(d.valor / total * 100) : 0;
+      var extra = comoParte
+        ? '<span class="bar-pct">' + porc + '%</span>'
+        : (o.sufijo ? '<span class="bar-pct">' + esc(o.sufijo) + '</span>' : '');
+
+      return '<div class="bar-row" tabindex="0" ' +
+               'aria-label="' + esc(d.etiqueta) + ': ' + d.valor +
+               (comoParte ? ' (' + porc + '%)' : (o.sufijo ? ' ' + esc(o.sufijo) : '')) + '">' +
+               '<span class="bar-label">' +
+                 '<i class="bar-dot" style="background:' + (d.color || MARCA) + '"></i>' +
+                 esc(d.etiqueta) +
+               '</span>' +
+               '<span class="bar-track">' +
+                 '<span class="bar-fill" style="width:' + Math.min(100, ancho).toFixed(1) + '%;' +
+                   'background:' + (d.color || MARCA) + '"></span>' +
+               '</span>' +
+               '<span class="bar-value">' + d.valor + extra + '</span>' +
+             '</div>';
+    });
+
+    el.innerHTML = '<div class="bar-chart">' + filas.join('') + '</div>';
+  }
+
+  /* ---------------------------------------------------------
+     Tabla equivalente: la gráfica nunca es el único acceso
+     --------------------------------------------------------- */
+  function tabla(datos, encabezados) {
+    var th = encabezados.map(function(h){ return '<th>' + esc(h) + '</th>'; }).join('');
+    var tr = datos.map(function(fila) {
+      return '<tr>' + fila.map(function(c){ return '<td>' + esc(c) + '</td>'; }).join('') + '</tr>';
+    }).join('');
+    return '<div class="table-wrap"><table class="data-table"><thead><tr>' + th +
+           '</tr></thead><tbody>' + tr + '</tbody></table></div>';
+  }
+
+  return {
+    linea: linea,
+    barras: barras,
+    tabla: tabla,
+    RIESGO: RIESGO,
+    ORDEN_RIESGO: ORDEN_RIESGO
+  };
+})();
+</script>

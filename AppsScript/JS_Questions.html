@@ -1,0 +1,173 @@
+<script>
+// ============================================================
+// JS_Questions — Cuestionario ROSA
+// Pre-llena lo que la IA pudo medir y recoge lo demás.
+// ============================================================
+
+var Questions = (function() {
+
+  // Valores por defecto: se asume la situación correcta y el
+  // usuario marca sólo lo que difiere.
+  var DEFECTOS = {
+    seatHeight:      'ok',
+    feet:            'floor',
+    panDepth:        'ok',
+    armrest:         'ok',
+    backSupport:     'ok',
+    monitorHeight:   'ok',
+    monitorDistance: 'ok',
+    phone:           'none',
+    duration:        '1to4'
+  };
+
+  // Campos que la IA puede proponer; se resaltan para que el
+  // usuario sepa qué revisar.
+  var PRELLENABLES = ['seatHeight', 'monitorHeight', 'backSupport', 'surfaceHigh'];
+
+  function form() { return document.getElementById('questionForm'); }
+
+  function marcarRadio(nombre, valor) {
+    var el = form().querySelector('input[name="' + nombre + '"][value="' + valor + '"]');
+    if (el) el.checked = true;
+    return !!el;
+  }
+
+  function marcarCheck(nombre, valor) {
+    var el = form().querySelector('input[name="' + nombre + '"]');
+    if (el) el.checked = !!valor;
+    return !!el;
+  }
+
+  // ── Abrir el ajuste manual desde los resultados ──────────
+  // El cuestionario es opcional: el análisis ya se calculó solo.
+  function abrirAjuste() {
+    var analysis = App.get('analysis');
+    if (!analysis) { App.toast('No hay un análisis en curso', 'warn'); return; }
+    prepare(analysis);
+    App.goTo('questions');
+  }
+
+  // ── Cargar el formulario con las respuestas vigentes ─────
+  function prepare(analysis) {
+    var r = analysis.respuestas || {};
+
+    // Refleja el estado actual del análisis, no valores en blanco
+    Object.keys(DEFECTOS).forEach(function(k) {
+      marcarRadio(k, r[k] !== undefined ? r[k] : DEFECTOS[k]);
+    });
+
+    Object.keys(r).forEach(function(k) {
+      if (typeof r[k] === 'boolean') marcarCheck(k, r[k]);
+    });
+
+    // Señala lo que el análisis marcó como problema, para revisarlo primero
+    var propuestos = [];
+    if (r.seatHeight    && r.seatHeight    !== 'ok') propuestos.push('seatHeight');
+    if (r.monitorHeight && r.monitorHeight !== 'ok') propuestos.push('monitorHeight');
+    if (r.backSupport   && r.backSupport   !== 'ok') propuestos.push('backSupport');
+    if (r.surfaceHigh) propuestos.push('surfaceHigh');
+
+    resaltarPropuestos(propuestos);
+    mostrarDetectados(analysis.objetos);
+    dibujarReferencia(analysis);
+    Quality.render(Quality.evaluar(analysis), 'qualityPanel');
+  }
+
+  // Señala visualmente las respuestas que vienen del análisis
+  function resaltarPropuestos(claves) {
+    form().querySelectorAll('.q-item').forEach(function(item) {
+      item.classList.remove('q-prefilled');
+      var etiqueta = item.querySelector('.q-badge-ai');
+      if (etiqueta) etiqueta.remove();
+    });
+
+    claves.forEach(function(clave) {
+      var item = form().querySelector('.q-item[data-q="' + clave + '"]');
+      if (!item) return;
+      item.classList.add('q-prefilled');
+      var label = item.querySelector('.q-label');
+      if (label && !item.querySelector('.q-badge-ai')) {
+        var b = document.createElement('span');
+        b.className   = 'q-badge-ai';
+        b.textContent = 'Detectado en tu foto';
+        label.appendChild(b);
+      }
+    });
+  }
+
+  function mostrarDetectados(objetos) {
+    var el = document.getElementById('qDetected');
+    var nombres = (objetos || []).map(function(o) { return o.label; });
+
+    if (nombres.length) {
+      el.innerHTML = 'En tu escritorio se identificó: <strong>' + nombres.join(', ') + '</strong>.';
+    } else {
+      el.textContent = 'El análisis no identificó objetos del escritorio en la foto.';
+    }
+  }
+
+  // Dibuja la foto con los puntos, como referencia mientras responde
+  function dibujarReferencia(analysis) {
+    var canvas = document.getElementById('questionCanvas');
+    var img    = analysis.img;
+    if (!img) return;
+
+    var escala = Math.min(1, 800 / img.naturalWidth);
+    canvas.width  = Math.round(img.naturalWidth  * escala);
+    canvas.height = Math.round(img.naturalHeight * escala);
+
+    var ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'rgba(10,24,16,0.20)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    Analysis.dibujarPuntosNeutros(ctx, analysis.puntos, canvas.width, canvas.height);
+  }
+
+  // ── Leer respuestas ──────────────────────────────────────
+  function leer() {
+    var f = form();
+    var r = {};
+
+    ['seatHeight','feet','panDepth','armrest','backSupport',
+     'monitorHeight','monitorDistance','phone','duration'].forEach(function(n) {
+      var sel = f.querySelector('input[name="' + n + '"]:checked');
+      r[n] = sel ? sel.value : DEFECTOS[n];
+    });
+
+    // "bad" y "none" se tratan igual en el puntaje del apoyabrazos
+    if (r.armrest !== 'ok') r.armrest = 'bad';
+
+    ['armrestHard','armrestWide','underDesk','surfaceHigh',
+     'alturaNoAjustable','profundidadNoAjustable',
+     'apoyabrazosNoAjustable','respaldoNoAjustable',
+     'neckTwist','glare','sinAtril','phoneReach','sinManosLibres',
+     'mouseAligned','mouseSameSurface','pinchGrip','apoyaMunecas',
+     'wristStraight','wristDeviated','keyboardHigh',
+     'alcanceElevado','bandejaNoAjustable'].forEach(function(n) {
+      var el = f.querySelector('input[name="' + n + '"]');
+      r[n] = el ? el.checked : false;
+    });
+
+    return r;
+  }
+
+  // ── Calcular y mostrar resultados ────────────────────────
+  function submit() {
+    var analysis = App.get('analysis');
+    if (!analysis) { App.toast('No hay un análisis en curso', 'warn'); return; }
+
+    var respuestas = leer();
+    var rosa       = Rosa.calcular(respuestas);
+
+    analysis.rosa       = rosa;
+    analysis.respuestas = respuestas;
+    App.set('analysis', analysis);
+
+    Analysis.mostrarResultados(analysis);
+    App.goTo('results');
+  }
+
+  return { prepare: prepare, submit: submit, leer: leer, abrirAjuste: abrirAjuste };
+})();
+</script>

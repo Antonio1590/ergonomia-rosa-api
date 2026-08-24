@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ROSA Expert</title>
+  <?!= include('CSS_Base') ?>
+  <?!= include('CSS_Components') ?>
+</head>
+<body>
+
+  <a class="skip-link" href="#appMain">Saltar al contenido</a>
+
+  <!-- Barra de navegación (oculta en login) -->
+  <nav class="navbar" id="navbar" aria-label="Navegación principal" hidden>
+    <div class="nav-brand">
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+        <circle cx="14" cy="14" r="14" fill="#005224"/>
+        <path d="M8 20 Q14 8 20 20" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/>
+        <circle cx="14" cy="10" r="2.5" fill="#16A34A"/>
+      </svg>
+      <span class="nav-title">ROSA Expert</span>
+    </div>
+    <div class="nav-actions">
+      <span class="nav-user" id="navUser"></span>
+      <button class="btn btn-sm btn-ghost" id="btnHistory" onclick="App.goTo('history'); History.load();">Mi historial</button>
+      <button class="btn btn-sm btn-ghost" id="btnDashboard" hidden onclick="App.goTo('dashboard'); Dashboard.load();">Panel</button>
+      <button class="btn btn-sm btn-outline" onclick="App.logout()">Salir</button>
+    </div>
+  </nav>
+
+  <!-- Contenido de páginas (SPA: solo una visible a la vez) -->
+  <main id="appMain" tabindex="-1">
+    <?!= include('Page_Login') ?>
+    <?!= include('Page_Guide') ?>
+    <?!= include('Page_Questions') ?>
+    <?!= include('Page_Results') ?>
+    <?!= include('Page_History') ?>
+    <?!= include('Page_Dashboard') ?>
+  </main>
+
+  <!-- Notificaciones: aria-live para que el lector las anuncie -->
+  <div class="toast-stack" id="toastStack" role="status" aria-live="polite" aria-atomic="false"></div>
+
+  <!-- Overlay de carga IA -->
+  <div class="loading-overlay" id="loadingOverlay" role="alertdialog"
+       aria-live="assertive" aria-busy="true" aria-labelledby="loadingTitle" hidden>
+    <div class="loading-card">
+      <div class="spinner-ring" aria-hidden="true"></div>
+      <p class="loading-title" id="loadingTitle">Analizando postura...</p>
+      <p class="loading-sub" id="loadingSub">Cargando modelo de IA</p>
+      <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+    </div>
+  </div>
+
+  <!-- Módulos JavaScript (orden importa) -->
+  <?!= include('Photos') ?>
+  <?!= include('JS_State') ?>
+  <?!= include('JS_Api') ?>
+  <?!= include('JS_Rosa') ?>
+  <?!= include('JS_Analysis') ?>
+  <?!= include('JS_Quality') ?>
+  <?!= include('JS_Questions') ?>
+  <?!= include('JS_Guide') ?>
+  <?!= include('JS_Charts') ?>
+  <?!= include('JS_History') ?>
+  <?!= include('JS_Dashboard') ?>
+  <?!= include('JS_Init') ?>
+
+</body>
+</html>

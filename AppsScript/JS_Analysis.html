@@ -1,0 +1,453 @@
+<script>
+// ============================================================
+// JS_Analysis — Análisis de la foto y presentación de resultados
+// Flujo: foto → IA (pose + objetos) → cuestionario → ROSA
+// ============================================================
+
+var Analysis = (function() {
+
+  // El color de un puntaje sale siempre de Rosa.nivelRiesgo: así la
+  // foto, las tarjetas y las gráficas no pueden discrepar entre sí.
+  function colorDePuntaje(p) { return Rosa.nivelRiesgo(p).color; }
+  var COLOR_NEUTRO = '#94A3B8';
+
+  var CLASS_COLORS = {
+    monitor:'#2563EB', laptop:'#7C3AED', teclado:'#7C3AED',
+    mouse:'#0891B2', telefono:'#DC2626', silla:'#059669',
+    escritorio:'#D97706', atril:'#9333EA', persona:'#16A34A'
+  };
+
+  // Cada articulación pertenece a una sección ROSA: el color del
+  // punto indica qué bloque del puesto necesita ajuste.
+  var JOINT_SECTION = {
+    oreja:   'monitorTel',
+    hombro:  'mouseTec',
+    codo:    'mouseTec',
+    muneca:  'mouseTec',
+    cadera:  'silla',
+    rodilla: 'silla',
+    tobillo: 'silla'
+  };
+
+  // Cadena anatómica: se traza el tramo cuando ambos extremos existen
+  var BONES = [
+    ['oreja','hombro'], ['hombro','codo'], ['codo','muneca'],
+    ['hombro','cadera'], ['cadera','rodilla'], ['rodilla','tobillo']
+  ];
+
+  var CLASE_ES = {
+    monitor:'Monitor', laptop:'Portátil', teclado:'Teclado', mouse:'Mouse',
+    telefono:'Teléfono', silla:'Silla', escritorio:'Escritorio',
+    atril:'Atril', persona:'Persona'
+  };
+
+  // Clase CSS del borde de las tarjetas de sección
+  function estadoDesdePuntaje(p) {
+    if (p <= 2) return 'ok';
+    if (p <= 4) return 'warn';
+    return 'error';
+  }
+
+  /* =========================================================
+     EJECUTAR ANÁLISIS
+     ========================================================= */
+  async function run() {
+    var photo = App.get('photo');
+    if (!photo) { App.toast('Selecciona una foto primero', 'warn'); return; }
+
+    App.showLoading('Enviando tu foto…', 'El análisis corre de forma segura en el servidor', 10);
+
+    try {
+      var img = new Image();
+      img.src = App.get('photoUrl');
+      await new Promise(function(res, rej) {
+        img.onload  = res;
+        img.onerror = function(){ rej(new Error('No se pudo cargar la imagen')); };
+      });
+
+      App.updateLoading('Analizando tu puesto de trabajo…',
+                        'Evaluando postura y elementos del escritorio', 45);
+
+      var r = await Api.analizarFoto(photo);
+      if (!r.ok) throw new Error(r.error);
+
+      var vision = r.data || {};
+
+      // Sin persona no hay nada que medir: se pide otra foto en vez
+      // de trasladarle el trabajo al usuario.
+      if (!vision.personaDetectada) {
+        App.hideLoading();
+        Guide.exigirNuevaFoto(
+          'No pudimos identificarte en la foto',
+          (vision.encuadre && vision.encuadre.observacion) ||
+          'Necesitamos verte sentado de perfil, con el cuerpo completo en el encuadre. ' +
+          'Toma la foto de nuevo desde un costado.'
+        );
+        return;
+      }
+
+      App.updateLoading('Calculando puntaje ROSA…', '', 85);
+
+      var analysis = {
+        img:        img,
+        puntos:     normalizarPuntos(vision.puntos),
+        objetos:    normalizarObjetos(vision.objetos),
+        angulos:    vision.angulos || {},
+        encuadre:   vision.encuadre || {},
+        respuestas: vision.respuestas || {},
+        rosa:       null
+      };
+
+      // El puntaje se calcula aquí con las tablas oficiales:
+      // el modelo observa, la metodología decide.
+      analysis.rosa = Rosa.calcular(analysis.respuestas);
+      App.set('analysis', analysis);
+
+      await new Promise(function(res){ setTimeout(res, 120); });
+
+      mostrarResultados(analysis);
+      App.goTo('results');
+
+    } catch (err) {
+      console.error('[Analysis] Error:', err);
+      App.toast(err.message, 'error');
+    } finally {
+      App.hideLoading();
+    }
+  }
+
+  /* ---------- Normalización de lo que devuelve Gemini ---------- */
+  // Las coordenadas llegan en escala 0–1000; se pasan a fracción
+  // para que el dibujo no dependa del tamaño de la imagen.
+  function normalizarPuntos(lista) {
+    var mapa = {};
+    (lista || []).forEach(function(p) {
+      if (!p || !p.nombre) return;
+      if (mapa[p.nombre]) return;               // de perfil basta un lado
+      mapa[p.nombre] = { x: (p.x || 0) / 1000, y: (p.y || 0) / 1000 };
+    });
+    return mapa;
+  }
+
+  function normalizarObjetos(lista) {
+    return (lista || [])
+      .filter(function(o) { return o && o.clase && o.clase !== 'persona'; })
+      .map(function(o) {
+        return {
+          clase:  o.clase,
+          label:  CLASE_ES[o.clase] || o.clase,
+          x: (o.x || 0) / 1000, y: (o.y || 0) / 1000,
+          w: (o.w || 0) / 1000, h: (o.h || 0) / 1000
+        };
+      });
+  }
+
+  /* =========================================================
+     RESULTADOS
+     ========================================================= */
+  function mostrarResultados(analysis) {
+    var rosa = analysis.rosa;
+
+    document.getElementById('resultsDate').textContent =
+      new Date().toLocaleDateString('es-CO',
+        { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+
+    var btnSave = document.getElementById('btnSave');
+    btnSave.disabled    = false;
+    btnSave.textContent = 'Guardar evaluación';
+
+    renderGauge(rosa);
+    renderCanvas(analysis, rosa);
+    renderRecommendations(rosa.recommendations);
+    renderDetectedObjects(analysis.objetos);
+    renderSections(rosa.secciones);
+
+    // Deja explícito qué pudo medirse desde la foto
+    Quality.render(Quality.evaluar(analysis), 'qualityPanelResults');
+  }
+
+  function renderGauge(rosa) {
+    var ARC = 251.3;
+    var pct = Math.min(1, rosa.score / rosa.maxScore);
+
+    var arc = document.getElementById('gaugeArc');
+    if (arc) {
+      arc.setAttribute('stroke', rosa.riskColor);
+      setTimeout(function(){
+        arc.setAttribute('stroke-dashoffset', (ARC * (1 - pct)).toFixed(1));
+      }, 60);
+    }
+
+    var num = document.getElementById('gaugeScore');
+    num.textContent = rosa.score;
+    num.style.color = rosa.riskColor;
+
+    var max = document.getElementById('gaugeMax');
+    if (max) max.textContent = 'de ' + rosa.maxScore;
+
+    var badge = document.getElementById('riskBadge');
+    badge.textContent = 'Riesgo ' + rosa.riskLevel;
+    badge.className   = 'badge ' + rosa.riskBadge;
+
+    document.getElementById('scoreSummary').textContent = rosa.accion;
+
+    // El método fija en 5 el umbral de intervención
+    var aviso = document.getElementById('interventionNote');
+    if (aviso) {
+      aviso.hidden = !rosa.requiereIntervencion;
+    }
+  }
+
+  /* ---------- Foto anotada ---------- */
+  function renderCanvas(analysis, rosa) {
+    document.getElementById('photoSection').style.display = '';
+
+    var img    = analysis.img;
+    var canvas = document.getElementById('analysisCanvas');
+    var escala = Math.min(1, 1000 / img.naturalWidth);
+
+    canvas.width  = Math.round(img.naturalWidth  * escala);
+    canvas.height = Math.round(img.naturalHeight * escala);
+
+    var ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'rgba(10,24,16,0.20)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    drawDetections(ctx, analysis.objetos, canvas.width, canvas.height);
+    drawJoints(ctx, analysis.puntos, canvas.width, canvas.height, rosa);
+  }
+
+  function drawDetections(ctx, objetos, W, H) {
+    var unit = Math.max(11, W / 46);
+
+    (objetos || []).forEach(function(o) {
+      var color = CLASS_COLORS[o.clase] || '#64748B';
+      var x = o.x*W, y = o.y*H, w = o.w*W, h = o.h*H;
+      if (w < 4 || h < 4) return;
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth   = Math.max(2, W/320);
+      roundRect(ctx, x, y, w, h, Math.max(4, W/120));
+      ctx.stroke();
+
+      ctx.font = '600 ' + unit + 'px system-ui, sans-serif';
+      var tw = ctx.measureText(o.label).width;
+      var padX = unit*0.5, boxH = unit*1.6;
+      var by = Math.max(0, y - boxH - 3);
+
+      ctx.fillStyle = color;
+      roundRect(ctx, x, by, tw + padX*2, boxH, boxH/2);
+      ctx.fill();
+
+      ctx.fillStyle    = '#fff';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(o.label, x + padX, by + boxH/2);
+    });
+  }
+
+  function puntos(mapa, W, H) {
+    return function(nombre) {
+      var p = mapa && mapa[nombre];
+      if (!p) return null;
+      return { x: p.x * W, y: p.y * H };
+    };
+  }
+
+  function trazarHuesos(ctx, pt, R) {
+    ctx.lineCap = 'round';
+    BONES.forEach(function(b) {
+      var a = pt(b[0]), c = pt(b[1]);
+      if (!a || !c) return;
+      ctx.strokeStyle = 'rgba(0,0,0,0.28)';
+      ctx.lineWidth   = R*0.7;
+      ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(c.x,c.y); ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+      ctx.lineWidth   = R*0.34;
+      ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(c.x,c.y); ctx.stroke();
+    });
+  }
+
+  function circulo(ctx, p, R, color) {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, R*1.45, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, R, 0, Math.PI*2);
+    ctx.fillStyle = color;
+    ctx.fill();
+  }
+
+  // Puntos coloreados por el puntaje de su sección ROSA
+  function drawJoints(ctx, mapa, W, H, rosa) {
+    if (!mapa) return;
+    var R  = Math.max(5, W/85);
+    var pt = puntos(mapa, W, H);
+    trazarHuesos(ctx, pt, R);
+
+    Object.keys(JOINT_SECTION).forEach(function(nombre) {
+      var p = pt(nombre);
+      if (!p) return;
+      var sec = rosa.secciones[JOINT_SECTION[nombre]];
+      circulo(ctx, p, R, sec ? colorDePuntaje(sec.total) : COLOR_NEUTRO);
+    });
+  }
+
+  // Puntos sin juicio: se usan al ajustar respuestas, antes de puntuar
+  function dibujarPuntosNeutros(ctx, mapa, W, H) {
+    if (!mapa) return;
+    var R  = Math.max(5, W/85);
+    var pt = puntos(mapa, W, H);
+    trazarHuesos(ctx, pt, R);
+    Object.keys(JOINT_SECTION).forEach(function(nombre) {
+      var p = pt(nombre);
+      if (p) circulo(ctx, p, R, '#006D32');
+    });
+  }
+
+  function roundRect(ctx, x, y, w, h, r) {
+    if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(x,y,w,h,r); return; }
+    ctx.beginPath();
+    ctx.moveTo(x+r,y);
+    ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);     ctx.arcTo(x,y,x+w,y,r);
+    ctx.closePath();
+  }
+
+  /* ---------- Recomendaciones ---------- */
+  function renderRecommendations(recs) {
+    var section = document.getElementById('recsSection');
+    var list    = document.getElementById('recList');
+    if (!recs || !recs.length) {
+      section.style.display = '';
+      list.innerHTML = '<li class="rec-item"><span class="rec-num">✓</span>' +
+        '<span class="rec-text">No se identificaron ajustes pendientes. ' +
+        'Mantén tu configuración actual.</span></li>';
+      return;
+    }
+    section.style.display = '';
+    list.innerHTML = recs.slice(0, 6).map(function(r, i) {
+      var cls = r.severity >= 3 ? 'error' : r.severity === 2 ? 'warn' : '';
+      return '<li class="rec-item ' + cls + '">' +
+               '<span class="rec-num">' + (i+1) + '</span>' +
+               '<span class="rec-text">' + r.text +
+                 '<span class="rec-tag">' + r.seccion + '</span>' +
+               '</span>' +
+             '</li>';
+    }).join('');
+  }
+
+  /* ---------- Objetos detectados ---------- */
+  function renderDetectedObjects(objetos) {
+    var section = document.getElementById('objectsSection');
+    if (!objetos || !objetos.length) { section.style.display = 'none'; return; }
+    section.style.display = '';
+    document.getElementById('detectedGrid').innerHTML = objetos.map(function(o) {
+      return '<div class="detected-chip">' +
+               '<span class="conf-dot" style="background:' +
+                 (CLASS_COLORS[o.clase]||'#64748B') + '"></span>' + o.label +
+             '</div>';
+    }).join('');
+  }
+
+  /* ---------- Puntaje por sección ---------- */
+  function renderSections(secciones) {
+    var ETIQUETAS = { ok:'Aceptable', warn:'Revisar', error:'Intervenir' };
+    document.getElementById('bodySection').style.display = '';
+
+    document.getElementById('bodyParts').innerHTML =
+      Object.keys(secciones).map(function(k) {
+        var s  = secciones[k];
+        var st = estadoDesdePuntaje(s.total);
+        return '<div class="body-part-card ' + st + '">' +
+                 '<span class="body-part-dot" style="background:' + colorDePuntaje(s.total) + '"></span>' +
+                 '<div class="body-part-info">' +
+                   '<span class="body-part-name">' + s.label + '</span>' +
+                   '<span class="body-part-val">' + ETIQUETAS[st] + ' · ' + s.total + '/10</span>' +
+                 '</div>' +
+               '</div>';
+      }).join('');
+  }
+
+  /* =========================================================
+     GUARDAR
+     ========================================================= */
+  async function save() {
+    var user     = App.get('user');
+    var analysis = App.get('analysis');
+    if (!user || !analysis || !analysis.rosa) {
+      App.toast('Sin datos que guardar', 'warn'); return;
+    }
+
+    var btn = document.getElementById('btnSave');
+    btn.disabled = true;
+
+    try {
+      var rosa = analysis.rosa;
+      var a    = analysis.angulos || {};
+
+      // La foto se sube antes: su enlace debe viajar en el mismo registro
+      var urlImagen = '';
+      var photo = App.get('photo');
+      if (photo) {
+        btn.textContent = 'Subiendo foto…';
+        try {
+          var up = await Api.uploadPhoto(photo, user.email);
+          if (up.ok) urlImagen = up.data.url;
+          else console.warn('[Analysis] Foto no subida:', up.error);
+        } catch (e) { console.warn('[Analysis] Foto no subida:', e.message); }
+      }
+
+      btn.textContent = 'Guardando…';
+
+      var record = {
+        fecha:        new Date().toISOString(),
+        email:        user.email,
+        nombre:       user.nombre || '',
+        cedula:       user.cedula || '',
+        puntajeFinal: rosa.score,
+        nivelRiesgo:  rosa.riskLevel,
+        urlImagen:    urlImagen,
+        puntajeSilla:    rosa.secciones.silla.total,
+        puntajePantalla: rosa.secciones.monitorTel.total,
+        puntajeTeclado:  rosa.secciones.mouseTec.total,
+        recomendaciones: rosa.recommendations.map(function(r){ return r.text; }),
+        neck: a.cuello||0, trunk: a.tronco||0,
+        legs: a.rodilla||0, arms: a.codo||0, wrist: 0,
+        objetosDetectados: (analysis.objetos||[]).map(function(o){ return o.label; })
+      };
+
+      var r1 = await Api.saveEvaluation(record);
+      if (!r1.ok) throw new Error(r1.error);
+
+      Api.saveTraining({
+        email: user.email, fecha: record.fecha,
+        neck: a.cuello||0, trunk: a.tronco||0,
+        leftKnee: a.rodilla||0, rightKnee: 0,
+        leftElbow: a.codo||0,   rightElbow: 0,
+        leftShoulder: 0, rightShoulder: 0,
+        puntajeFinal: rosa.score, nivelRiesgo: rosa.riskLevel,
+        detecciones: JSON.stringify(record.objetosDetectados),
+        numFotos: 1,
+        respuestas: JSON.stringify(analysis.respuestas || {})
+      }).catch(function(){});
+
+      App.toast('Evaluación guardada correctamente', 'ok');
+      btn.textContent = '✓ Guardado';
+
+    } catch (err) {
+      App.toast('Error al guardar: ' + err.message, 'error');
+      btn.disabled    = false;
+      btn.textContent = 'Guardar evaluación';
+    }
+  }
+
+  return {
+    run: run,
+    save: save,
+    mostrarResultados: mostrarResultados,
+    dibujarPuntosNeutros: dibujarPuntosNeutros
+  };
+})();
+</script>

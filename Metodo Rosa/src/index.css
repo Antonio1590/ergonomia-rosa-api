@@ -1,0 +1,14 @@
+@import "tailwindcss";
+
+html,
+body,
+#root{
+  width:100%;
+  height:100%;
+}
+
+body{
+  margin:0;
+  font-family:"Public Sans",sans-serif;
+  background:#f8f9ff;
+}

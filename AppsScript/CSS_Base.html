@@ -1,0 +1,213 @@
+<style>
+/* ============================================================
+   ROSA Expert — Tokens de diseño y estilos base
+   Paleta: verde oscuro #005224, verde medio #006D32,
+           verde claro #EDF3EF, blanco, grises neutros
+   ============================================================ */
+
+:root {
+  --c-brand:     #005224;
+  --c-brand-dk:  #003d1a;
+  --c-brand-md:  #006D32;
+  --c-brand-lt:  #EDF3EF;
+  --c-ok:        #16A34A;
+  --c-warn:      #D97706;
+  --c-error:     #DC2626;
+  --c-neutral:   #6B7280;
+  --c-bg:        #F4F6F5;
+  --c-surface:   #FFFFFF;
+  --c-border:    #D1D9D4;
+  --c-text:      #111827;
+  --c-text-2:    #4B5563;
+  --c-text-3:    #9CA3AF;
+  --radius-sm:   8px;
+  --radius-md:   14px;
+  --radius-lg:   20px;
+  --radius-xl:   28px;
+  --shadow-sm:   0 1px 3px rgba(0,0,0,.08);
+  --shadow-md:   0 4px 16px rgba(0,0,0,.10);
+  --shadow-lg:   0 8px 32px rgba(0,0,0,.13);
+  --font:        system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono:   'SF Mono', 'Consolas', monospace;
+  --nav-h:       58px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+[hidden] { display: none !important; }
+
+/* Foco visible en todo elemento interactivo: la navegación por
+   teclado debe poder seguirse sin ver el cursor. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 3px solid #0F62D6;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.navbar :where(a, button):focus-visible { outline-color: #FFFFFF; }
+
+/* Respeta la preferencia del sistema por menos movimiento */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Enlace de salto: visible sólo al recibir foco */
+.skip-link {
+  position: absolute; left: .5rem; top: -3rem; z-index: 200;
+  background: var(--c-surface); color: var(--c-brand);
+  font-size: .85rem; font-weight: 700;
+  padding: .6rem 1rem; border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md); text-decoration: none;
+  transition: top .15s;
+}
+.skip-link:focus { top: .5rem; }
+
+/* Texto only para lectores de pantalla */
+.solo-lectores {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+html { font-size: 16px; scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font);
+  background: var(--c-bg);
+  color: var(--c-text);
+  line-height: 1.55;
+  min-height: 100vh;
+}
+
+/* Navegación ------------------------------------------------ */
+.navbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  height: var(--nav-h);
+  background: var(--c-brand);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1.25rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,.25);
+}
+.nav-brand { display: flex; align-items: center; gap: .6rem; }
+.nav-title  { font-weight: 700; font-size: 1rem; letter-spacing: .01em; }
+.nav-actions { display: flex; align-items: center; gap: .75rem; }
+.nav-user   { font-size: .8rem; opacity: .8; max-width: 160px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Layout principal ------------------------------------------ */
+#appMain {
+  max-width: 940px;
+  margin: 0 auto;
+  padding: 1.75rem 1.25rem 4rem;
+}
+/* Las pantallas de una sola columna no deben estirarse a lo ancho */
+#page-guide { max-width: 700px; margin: 0 auto; }
+.page { display: none; }
+.page.active { display: block; }
+
+/* Tipografía ------------------------------------------------ */
+h1 {
+  font-size: clamp(1.5rem, 1.2rem + 1.2vw, 1.9rem);
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: var(--c-brand);
+  text-wrap: balance;
+}
+h2 { font-size: 1.2rem; font-weight: 700; letter-spacing: -0.01em; }
+h3 { font-size: 1rem;   font-weight: 600; }
+p  { color: var(--c-text-2); }
+
+.text-xs  { font-size: .75rem; }
+.text-sm  { font-size: .875rem; }
+.text-lg  { font-size: 1.125rem; }
+.text-xl  { font-size: 1.25rem; }
+.text-muted { color: var(--c-text-3); }
+.font-bold  { font-weight: 700; }
+.font-mono  { font-family: var(--font-mono); }
+
+/* Espaciado ------------------------------------------------- */
+.mt-1 { margin-top: .25rem; }
+.mt-2 { margin-top: .5rem; }
+.mt-3 { margin-top: .75rem; }
+.mt-4 { margin-top: 1rem; }
+.mt-6 { margin-top: 1.5rem; }
+.mt-8 { margin-top: 2rem; }
+.mb-4 { margin-bottom: 1rem; }
+.mb-6 { margin-bottom: 1.5rem; }
+.gap-2 { gap: .5rem; }
+.gap-3 { gap: .75rem; }
+.gap-4 { gap: 1rem; }
+
+/* Flex / Grid helpers --------------------------------------- */
+.flex       { display: flex; }
+.flex-col   { flex-direction: column; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+@media (max-width: 480px) { .grid-2 { grid-template-columns: 1fr; } }
+
+/* Colores de estado ---------------------------------------- */
+.ok    { color: var(--c-ok); }
+.warn  { color: var(--c-warn); }
+.error { color: var(--c-error); }
+
+/* Overlay de carga ----------------------------------------- */
+.loading-overlay {
+  position: fixed; inset: 0; z-index: 999;
+  background: rgba(0,0,0,.55);
+  display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(3px);
+}
+.loading-card {
+  background: var(--c-surface);
+  border-radius: var(--radius-lg);
+  padding: 2.5rem 2rem;
+  text-align: center;
+  width: min(90vw, 340px);
+  box-shadow: var(--shadow-lg);
+}
+.loading-title { font-weight: 700; font-size: 1.05rem; margin-top: 1.25rem; color: var(--c-text); }
+.loading-sub   { font-size: .82rem; color: var(--c-text-3); margin-top: .4rem; }
+.progress-bar  { height: 4px; background: var(--c-border); border-radius: 99px; margin-top: 1.25rem; overflow: hidden; }
+.progress-fill { height: 100%; background: var(--c-ok); border-radius: 99px; transition: width .4s ease; }
+
+/* Spinner -------------------------------------------------- */
+.spinner-ring {
+  width: 48px; height: 48px; margin: 0 auto;
+  border: 4px solid var(--c-brand-lt);
+  border-top-color: var(--c-brand);
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Toast ---------------------------------------------------- */
+.toast-stack {
+  position: fixed; bottom: 1.25rem; right: 1.25rem;
+  z-index: 1000; display: flex; flex-direction: column; gap: .5rem;
+  width: min(90vw, 340px);
+  pointer-events: none;
+}
+.toast {
+  padding: .9rem 1.1rem;
+  border-radius: var(--radius-md);
+  font-size: .875rem;
+  font-weight: 500;
+  color: #fff;
+  box-shadow: var(--shadow-md);
+  animation: toastIn .25s ease;
+}
+.toast.ok    { background: var(--c-ok); }
+.toast.error { background: var(--c-error); }
+.toast.warn  { background: var(--c-warn); }
+.toast.info  { background: var(--c-brand); }
+@keyframes toastIn { from { opacity: 0; transform: translateY(8px); } }
+</style>

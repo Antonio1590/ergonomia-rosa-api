@@ -1,0 +1,103 @@
+<div id="page-guide" class="page">
+
+  <!-- Encabezado -->
+  <div style="margin-bottom:1.5rem;">
+    <div class="steps">
+      <div class="step-dot active">1</div>
+      <div class="step-line"></div>
+      <div class="step-dot pending">2</div>
+    </div>
+    <h1 style="color:var(--c-brand);">Toma tu foto</h1>
+    <p class="text-sm mt-2">Asegúrate de que tu postura y escritorio sean visibles como en los ejemplos.</p>
+  </div>
+
+  <!-- Fotos de guía -->
+  <div class="grid-2" style="margin-bottom:1.5rem;">
+    <div>
+      <p class="section-title">Foto 1 · Postura lateral</p>
+      <div class="guide-photo-wrap">
+        <img id="guidePhoto1" alt="Postura lateral correcta"
+             onerror="Guide.onPhotoError(this,'guidePhoto1Placeholder')">
+        <div id="guidePhoto1Placeholder" style="display:none;height:100%;align-items:center;justify-content:center;flex-direction:column;gap:.5rem;padding:1rem;text-align:center;">
+          <span style="font-size:2.5rem;">🪑</span>
+          <p class="text-sm font-bold">Vista lateral completa</p>
+          <p class="text-xs text-muted">Siéntate de perfil con todo el cuerpo visible</p>
+        </div>
+        <span class="guide-badge">Perfil</span>
+      </div>
+    </div>
+    <div>
+      <p class="section-title">Foto 2 · Escritorio completo</p>
+      <div class="guide-photo-wrap">
+        <img id="guidePhoto2" alt="Escritorio completo"
+             onerror="Guide.onPhotoError(this,'guidePhoto2Placeholder')">
+        <div id="guidePhoto2Placeholder" style="display:none;height:100%;align-items:center;justify-content:center;flex-direction:column;gap:.5rem;padding:1rem;text-align:center;">
+          <span style="font-size:2.5rem;">🖥️</span>
+          <p class="text-sm font-bold">Escritorio completo</p>
+          <p class="text-xs text-muted">Incluye monitor, teclado, mouse y silla</p>
+        </div>
+        <span class="guide-badge">Escritorio</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Aviso cuando la foto anterior no sirvió -->
+  <div id="retakeNotice" style="margin-bottom:1rem;" hidden></div>
+
+  <!-- Vista previa de imagen seleccionada -->
+  <div id="previewSection" style="display:none;margin-bottom:1rem;">
+    <p class="section-title">Tu foto</p>
+    <div class="preview-wrap">
+      <img id="previewImg" alt="Foto seleccionada">
+      <button class="preview-remove" onclick="Guide.clearPhoto()"
+              aria-label="Quitar la foto seleccionada">✕</button>
+    </div>
+    <div class="picker-row" id="pickerPreview">
+      <button class="btn btn-outline btn-full" onclick="Guide.openGallery()">Cambiar foto</button>
+      <button class="btn btn-outline btn-full" id="btnCameraPreview"
+              hidden onclick="Guide.openCamera()">Tomar con la cámara</button>
+    </div>
+  </div>
+
+  <!-- Drop zone (visible si no hay foto) -->
+  <div id="dropzoneSection" style="margin-bottom:1rem;">
+    <div class="dropzone" id="dropzone"
+         role="button" tabindex="0"
+         aria-label="Seleccionar una fotografía desde la galería"
+         onclick="Guide.openGallery()"
+         onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();Guide.openGallery();}"
+         ondragover="Guide.onDragOver(event)"
+         ondragleave="Guide.onDragLeave(event)"
+         ondrop="Guide.onDrop(event)">
+      <div class="dropzone-icon">📷</div>
+      <p class="dropzone-title">Sube tu foto aquí</p>
+      <p class="dropzone-sub">Arrastra o toca para seleccionar</p>
+    </div>
+
+    <div class="picker-row" id="pickerDrop">
+      <button class="btn btn-outline btn-full" onclick="Guide.openGallery()">Buscar en mis archivos</button>
+      <button class="btn btn-outline btn-full" id="btnCameraDrop"
+              hidden onclick="Guide.openCamera()">Tomar con la cámara</button>
+    </div>
+  </div>
+
+  <!-- Los inputs viven fuera de las secciones que se ocultan:
+       si quedaran dentro de dropzoneSection, al mostrar la vista previa
+       se ocultarían con ella y sería imposible elegir otra foto. -->
+  <input type="file" id="fileGallery" accept="image/*" style="display:none"
+         onchange="Guide.onFileSelected(event)">
+  <input type="file" id="fileCamera" accept="image/*" capture="environment" style="display:none"
+         onchange="Guide.onFileSelected(event)">
+
+  <!-- Botón de análisis -->
+  <div style="position:sticky;bottom:1rem;z-index:10;padding-top:.5rem;">
+    <button class="btn btn-primary btn-full btn-lg" id="btnAnalyze"
+            disabled onclick="Analysis.run()">
+      Analizar postura
+    </button>
+    <p id="analyzeHint" class="text-xs text-muted" style="text-align:center;margin-top:.5rem;">
+      Selecciona una foto para continuar
+    </p>
+  </div>
+
+</div>

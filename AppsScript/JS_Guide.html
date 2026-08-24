@@ -1,0 +1,253 @@
+<script>
+// ============================================================
+// JS_Guide — Lógica de la página de guía: login, foto, cámara
+// ============================================================
+
+var Guide = (function() {
+
+  var STATIC_BASE = 'https://famous-tartufo-04dba5.netlify.app';
+
+  // ── Login ────────────────────────────────────────────────
+  async function handleLogin() {
+    var email  = document.getElementById('loginEmail').value.trim();
+    var cedula = document.getElementById('loginCedula').value.trim();
+    var errEl  = document.getElementById('loginError');
+    var btn    = document.getElementById('btnLogin');
+
+    errEl.style.display = 'none';
+
+    if (!email || !cedula) {
+      showError('Completa todos los campos');
+      return;
+    }
+
+    btn.disabled    = true;
+    btn.textContent = 'Verificando…';
+
+    try {
+      var result = await Api.login(email, cedula);
+      if (!result.ok) {
+        showError(result.error || 'Credenciales incorrectas');
+      } else {
+        App.saveSession(result.data);
+        App.goTo('guide');
+        initGuidePage();
+      }
+    } catch (err) {
+      showError('Error de conexión: ' + err.message);
+    } finally {
+      btn.disabled    = false;
+      btn.textContent = 'Ingresar';
+    }
+  }
+
+  function showError(msg) {
+    var el = document.getElementById('loginError');
+    el.textContent   = msg;
+    el.style.display = 'block';
+  }
+
+  // ── Fotos de guía ────────────────────────────────────────
+  function showPhoto(imgId, placeholderId, dataUrl) {
+    var img = document.getElementById(imgId);
+    var ph  = document.getElementById(placeholderId);
+    if (!img) return;
+    img.style.display = '';
+    if (ph) ph.style.display = 'none';
+    img.src = dataUrl;
+  }
+
+  // Solo oculta la imagen si realmente falló una fuente no vacía
+  function onPhotoError(img, placeholderId) {
+    if (!img.getAttribute('src')) return;
+    img.style.display = 'none';
+    var ph = document.getElementById(placeholderId);
+    if (ph) ph.style.display = 'flex';
+  }
+
+  // ── Inicializar página de guía ───────────────────────────
+  function initGuidePage() {
+    // Fotos de guía embebidas (base64): no dependen de ningún servidor
+    showPhoto('guidePhoto1', 'guidePhoto1Placeholder', Photos.posturaLateral);
+    showPhoto('guidePhoto2', 'guidePhoto2Placeholder', Photos.puestoTrabajo);
+
+    // El botón de cámara sólo aparece donde abre la cámara de verdad.
+    // En escritorio, capture="environment" se ignora y ambos botones
+    // abrirían el mismo selector de archivos.
+    var hayCamara = window.matchMedia('(pointer: coarse)').matches;
+    ['btnCameraDrop', 'btnCameraPreview'].forEach(function(id) {
+      var b = document.getElementById(id);
+      if (b) b.hidden = !hayCamara;
+    });
+
+  }
+
+  // ── Drop zone ────────────────────────────────────────────
+  function onDragOver(e) {
+    e.preventDefault();
+    document.getElementById('dropzone').classList.add('drag-over');
+  }
+
+  function onDragLeave(e) {
+    document.getElementById('dropzone').classList.remove('drag-over');
+  }
+
+  function onDrop(e) {
+    e.preventDefault();
+    document.getElementById('dropzone').classList.remove('drag-over');
+    var file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) setPhoto(file);
+    else App.toast('Solo se aceptan imágenes', 'warn');
+  }
+
+  // ── Abrir selector de archivo ────────────────────────────
+  function openGallery() {
+    document.getElementById('fileGallery').click();
+  }
+
+  function openCamera() {
+    document.getElementById('fileCamera').click();
+  }
+
+  function onFileSelected(e) {
+    var file = e.target.files[0];
+    if (file) setPhoto(file);
+    e.target.value = '';  // reset para poder seleccionar la misma imagen otra vez
+  }
+
+  // ── Compresión ───────────────────────────────────────────
+  // Las fotos de celular pesan varios MB y en base64 crecen un 33 %,
+  // lo que hace lenta o imposible la subida a Drive. Reducirlas aquí
+  // acelera además la inferencia, que trabaja a 640 px de todas formas.
+  var MAX_LADO = 1600;
+  var CALIDAD  = 0.85;
+
+  function comprimir(file) {
+    return new Promise(function(resolve) {
+      if (!file.type || file.type.indexOf('image/') !== 0) return resolve(file);
+
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+
+      img.onload = function() {
+        var w = img.naturalWidth, h = img.naturalHeight;
+        var mayor = Math.max(w, h);
+
+        // Ya es pequeña y ligera: no vale la pena recodificar
+        if (mayor <= MAX_LADO && file.size < 1500000) {
+          URL.revokeObjectURL(url);
+          return resolve(file);
+        }
+
+        var escala = Math.min(1, MAX_LADO / mayor);
+        var canvas = document.createElement('canvas');
+        canvas.width  = Math.round(w * escala);
+        canvas.height = Math.round(h * escala);
+
+        var ctx = canvas.getContext('2d');
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(url);
+
+        canvas.toBlob(function(blob) {
+          if (!blob || blob.size >= file.size) return resolve(file);
+          resolve(new File([blob], (file.name || 'foto').replace(/\.\w+$/, '') + '.jpg',
+                           { type: 'image/jpeg' }));
+        }, 'image/jpeg', CALIDAD);
+      };
+
+      img.onerror = function() { URL.revokeObjectURL(url); resolve(file); };
+      img.src = url;
+    });
+  }
+
+  // ── Establecer foto ──────────────────────────────────────
+  async function setPhoto(original) {
+    var btn  = document.getElementById('btnAnalyze');
+    var hint = document.getElementById('analyzeHint');
+    btn.disabled     = true;
+    hint.textContent = 'Preparando imagen…';
+
+    ocultarAvisoFoto();
+
+    var file = await comprimir(original);
+    if (file !== original) {
+      console.log('[Guide] Foto comprimida: ' +
+        Math.round(original.size/1024) + ' KB → ' + Math.round(file.size/1024) + ' KB');
+    }
+
+    App.setPhoto(file);
+
+    // Mostrar vista previa
+    document.getElementById('previewImg').src = App.get('photoUrl');
+    document.getElementById('previewSection').style.display = '';
+    document.getElementById('dropzoneSection').style.display = 'none';
+
+    // Habilitar botón de análisis
+    btn.disabled     = false;
+    hint.textContent = 'Foto lista · toca "Analizar postura"';
+  }
+
+  function clearPhoto() {
+    App.clearPhoto();
+    var prev = document.getElementById('previewImg');
+    prev.removeAttribute('src');       // src="" dispararía el evento error
+    document.getElementById('previewSection').style.display = 'none';
+    document.getElementById('dropzoneSection').style.display = '';
+
+    // Los inputs deben quedar vacíos para poder reelegir el mismo archivo
+    document.getElementById('fileGallery').value = '';
+    document.getElementById('fileCamera').value  = '';
+
+    var btn  = document.getElementById('btnAnalyze');
+    var hint = document.getElementById('analyzeHint');
+    btn.disabled     = true;
+    btn.textContent  = 'Analizar postura';
+    hint.textContent = 'Selecciona una foto para continuar';
+  }
+
+  // Devuelve al usuario a la guía pidiendo una foto mejor.
+  // Se usa cuando la imagen no permite medir: repetirla es la
+  // única salida válida, no rellenar datos a mano.
+  function exigirNuevaFoto(titulo, detalle) {
+    clearPhoto();
+    App.set('analysis', null);
+    App.goTo('guide');
+    initGuidePage();
+
+    var aviso = document.getElementById('retakeNotice');
+    if (aviso) {
+      aviso.innerHTML =
+        '<div class="quality-card error" role="alert">' +
+          '<span class="quality-icon" aria-hidden="true">!</span>' +
+          '<div><p class="quality-title">' + titulo + '</p>' +
+          '<p class="quality-detail">' + detalle + '</p></div>' +
+        '</div>';
+      aviso.hidden = false;
+      aviso.scrollIntoView({ block: 'nearest' });
+    }
+    App.toast('Vuelve a tomar la foto', 'warn');
+  }
+
+  function ocultarAvisoFoto() {
+    var aviso = document.getElementById('retakeNotice');
+    if (aviso) aviso.hidden = true;
+  }
+
+  // Vuelve a la guía dejando todo limpio para una evaluación nueva
+  function startNew() {
+    clearPhoto();
+    App.set('analysis', null);
+    App.goTo('guide');
+    initGuidePage();
+  }
+
+  return {
+    handleLogin, initGuidePage, onPhotoError,
+    onDragOver, onDragLeave, onDrop,
+    openGallery, openCamera, onFileSelected,
+    setPhoto, clearPhoto, startNew,
+    exigirNuevaFoto, ocultarAvisoFoto
+  };
+})();
+</script>

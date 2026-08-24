@@ -1,0 +1,74 @@
+<div id="page-dashboard" class="page">
+
+  <div style="margin-bottom:1.5rem;">
+    <h1 style="color:var(--c-brand);">Panel de administración</h1>
+    <p class="text-sm mt-2">Evaluaciones de todos los colaboradores</p>
+  </div>
+
+  <!-- Estadísticas rápidas -->
+  <div class="stat-grid" id="dashStats">
+    <div class="stat-card"><div class="stat-num" id="statTotal">—</div><div class="stat-name">Evaluaciones</div></div>
+    <div class="stat-card"><div class="stat-num" id="statHigh">—</div><div class="stat-name">Riesgo alto</div></div>
+    <div class="stat-card"><div class="stat-num" id="statAvg">—</div><div class="stat-name">Puntaje prom.</div></div>
+  </div>
+
+  <!-- Gráficas -->
+  <div class="dash-charts">
+    <section class="chart-card">
+      <h2 class="chart-title">Distribución por nivel de riesgo</h2>
+      <p class="chart-sub">Colaboradores evaluados en cada nivel</p>
+      <div id="chartRiesgo"></div>
+    </section>
+
+    <section class="chart-card">
+      <h2 class="chart-title">Puntaje promedio por sección</h2>
+      <p class="chart-sub">Dónde se concentran los hallazgos</p>
+      <div id="chartSecciones"></div>
+    </section>
+  </div>
+
+  <section class="chart-card" style="margin-top:1rem;">
+    <h2 class="chart-title">Evolución del puntaje promedio</h2>
+    <p class="chart-sub">Promedio mensual de todas las evaluaciones</p>
+    <div id="chartTendencia"></div>
+  </section>
+
+  <!-- Filtros -->
+  <div style="display:flex;gap:.75rem;margin-top:1.25rem;flex-wrap:wrap;">
+    <input class="input" id="dashSearch" placeholder="Buscar por correo o nombre…"
+           style="flex:1;min-width:160px;" oninput="Dashboard.filter()">
+    <select class="input" id="dashRisk" style="width:auto;" onchange="Dashboard.filter()">
+      <option value="">Todos los niveles</option>
+      <option value="Bajo">Bajo</option>
+      <option value="Medio">Medio</option>
+      <option value="Alto">Alto</option>
+      <option value="Muy Alto">Muy Alto</option>
+    </select>
+  </div>
+
+  <!-- Tabla de registros -->
+  <div class="table-wrap mt-4" id="dashTableWrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Fecha</th>
+          <th>Colaborador</th>
+          <th>Puntaje</th>
+          <th>Riesgo</th>
+          <th>Foto</th>
+        </tr>
+      </thead>
+      <tbody id="dashTableBody">
+        <tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--c-text-3);">Cargando…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Paginación -->
+  <div style="display:flex;justify-content:center;gap:.5rem;margin-top:1rem;" id="dashPages"></div>
+
+  <div style="margin-top:1.5rem;">
+    <button class="btn btn-outline" onclick="Dashboard.exportCSV()">⬇ Exportar CSV</button>
+  </div>
+
+</div>

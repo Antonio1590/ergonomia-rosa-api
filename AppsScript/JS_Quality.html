@@ -1,0 +1,93 @@
+<script>
+// ============================================================
+// JS_Quality — Calidad del encuadre
+//
+// El propio modelo informa si la foto permite medir bien.
+// Aquí solo se traduce ese diagnóstico a algo accionable.
+// ============================================================
+
+var Quality = (function() {
+
+  function evaluar(analysis) {
+    var e = analysis.encuadre || {};
+    var avisos = [];
+
+    if (!e.esPerfil) {
+      avisos.push({
+        nivel: 'warn',
+        titulo: 'La foto no está tomada de perfil',
+        detalle: 'Los ángulos de cuello y espalda se miden mejor desde un costado. ' +
+                 'Repetir la foto de lado hará el resultado más preciso.'
+      });
+    }
+
+    if (!e.cuerpoCompleto) {
+      avisos.push({
+        nivel: 'warn',
+        titulo: 'No se ve el cuerpo completo',
+        detalle: 'Sin las piernas visibles no se puede verificar la altura de la silla. ' +
+                 'Revisa esa parte del resultado con criterio propio.',
+        campos: ['seatHeight']
+      });
+    }
+
+    if (e.iluminacionSuficiente === false) {
+      avisos.push({
+        nivel: 'warn',
+        titulo: 'La foto tiene poca luz',
+        detalle: 'Con mejor iluminación el análisis gana precisión.'
+      });
+    }
+
+    // Observación libre del modelo, si aportó alguna
+    if (e.observacion && avisos.length === 0) {
+      avisos.push({
+        nivel: 'warn',
+        titulo: 'Revisa el encuadre',
+        detalle: e.observacion
+      });
+    }
+
+    return { utilizable: true, avisos: avisos };
+  }
+
+  function render(resultado, contenedorId) {
+    var cont = document.getElementById(contenedorId || 'qualityPanelResults');
+    if (!cont) return;
+
+    if (!resultado.avisos.length) {
+      cont.innerHTML =
+        '<div class="quality-card ok" role="status">' +
+          '<span class="quality-icon" aria-hidden="true">✓</span>' +
+          '<div><p class="quality-title">Foto apta para el análisis</p>' +
+          '<p class="quality-detail">Se evaluaron todos los aspectos visibles ' +
+          'y el formulario se diligenció automáticamente.</p></div>' +
+        '</div>';
+      cont.hidden = false;
+      return;
+    }
+
+    cont.innerHTML = resultado.avisos.map(function(a) {
+      return '<div class="quality-card ' + a.nivel + '" role="status">' +
+               '<span class="quality-icon" aria-hidden="true">' +
+                 (a.nivel === 'error' ? '!' : 'i') +
+               '</span>' +
+               '<div>' +
+                 '<p class="quality-title">' + a.titulo + '</p>' +
+                 '<p class="quality-detail">' + a.detalle + '</p>' +
+               '</div>' +
+             '</div>';
+    }).join('');
+    cont.hidden = false;
+
+    resultado.avisos.forEach(function(a) {
+      (a.campos || []).forEach(function(campo) {
+        var item = document.querySelector('.q-item[data-q="' + campo + '"]');
+        if (item) item.classList.add('q-verificar');
+      });
+    });
+  }
+
+  return { evaluar: evaluar, render: render };
+})();
+</script>

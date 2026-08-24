@@ -1,0 +1,159 @@
+<script>
+// ============================================================
+// JS_State — Estado global, routing SPA, sesión, toasts
+// ============================================================
+
+var App = (function() {
+  var _state = {
+    user:       null,   // { email, nombre, cedula, esAdmin }
+    photo:      null,   // File object
+    photoUrl:   null,   // object URL
+    analysis:   null,   // resultado del análisis
+    currentPage: null
+  };
+
+  // ── Diagnóstico visible ─────────────────────────────────
+  // Una pantalla en blanco no dice nada. Si falta una plantilla,
+  // se indica exactamente qué archivo revisar en Apps Script.
+  function showFatal(titulo, detalle) {
+    var presentes = Array.prototype.map.call(
+      document.querySelectorAll('.page'),
+      function(p) { return p.id.replace('page-', ''); }
+    );
+    var main = document.getElementById('appMain');
+    if (!main) { alert(titulo + '\n' + detalle); return; }
+
+    document.getElementById('navbar').hidden = true;
+    document.getElementById('loadingOverlay').hidden = true;
+
+    main.innerHTML =
+      '<div class="fatal-card">' +
+        '<span class="fatal-icon">⚠️</span>' +
+        '<h2 class="fatal-title">' + titulo + '</h2>' +
+        '<p class="fatal-detail">' + detalle + '</p>' +
+        '<p class="fatal-label">Pantallas detectadas</p>' +
+        '<code class="fatal-code">' +
+          (presentes.length ? presentes.join(' · ') : 'ninguna') +
+        '</code>' +
+      '</div>';
+  }
+
+  // ── Navegación ──────────────────────────────────────────
+  function goTo(pageId) {
+    var page = document.getElementById('page-' + pageId);
+    if (!page) {
+      var archivo = 'Page_' + pageId.charAt(0).toUpperCase() + pageId.slice(1);
+      showFatal(
+        'Falta la pantalla "' + pageId + '"',
+        'En Apps Script debe existir un archivo HTML llamado <strong>' + archivo +
+        '</strong> y estar incluido en <strong>Index</strong>. ' +
+        'Revisa que el nombre no lleve la extensión .html.'
+      );
+      return;
+    }
+
+    document.querySelectorAll('.page').forEach(function(p) {
+      p.classList.remove('active');
+    });
+    page.classList.add('active');
+    _state.currentPage = pageId;
+    window.scrollTo({ top: 0, behavior: 'auto' });
+
+    // Al cambiar de pantalla el foco vuelve al contenido: sin esto,
+    // quien navega con teclado o lector queda en el elemento anterior.
+    var main = document.getElementById('appMain');
+    if (main) main.focus({ preventScroll: true });
+
+    var navbar = document.getElementById('navbar');
+    if (pageId === 'login') {
+      navbar.hidden = true;
+    } else {
+      navbar.hidden = false;
+      var navUser = document.getElementById('navUser');
+      if (_state.user) navUser.textContent = _state.user.nombre || _state.user.email;
+      var btnDash = document.getElementById('btnDashboard');
+      if (btnDash) btnDash.hidden = !(_state.user && _state.user.esAdmin);
+    }
+  }
+
+  // ── Sesión ──────────────────────────────────────────────
+  function saveSession(user) {
+    _state.user = user;
+    try { sessionStorage.setItem('rosa_user', JSON.stringify(user)); } catch(_) {}
+  }
+
+  function loadSession() {
+    try {
+      var raw = sessionStorage.getItem('rosa_user');
+      if (raw) { _state.user = JSON.parse(raw); return true; }
+    } catch(_) {}
+    return false;
+  }
+
+  function logout() {
+    _state.user = null;
+    _state.photo = null;
+    _state.photoUrl = null;
+    _state.analysis = null;
+    try { sessionStorage.removeItem('rosa_user'); } catch(_) {}
+    goTo('login');
+    toast('Sesión cerrada', 'info');
+  }
+
+  // ── Foto ────────────────────────────────────────────────
+  function setPhoto(file) {
+    if (_state.photoUrl) URL.revokeObjectURL(_state.photoUrl);
+    _state.photo    = file;
+    _state.photoUrl = URL.createObjectURL(file);
+  }
+
+  function clearPhoto() {
+    if (_state.photoUrl) URL.revokeObjectURL(_state.photoUrl);
+    _state.photo    = null;
+    _state.photoUrl = null;
+  }
+
+  // ── Toast ───────────────────────────────────────────────
+  function toast(msg, type) {
+    type = type || 'info';
+    var container = document.getElementById('toastStack');
+    var el = document.createElement('div');
+    el.className = 'toast ' + type;
+    el.textContent = msg;
+    container.appendChild(el);
+    setTimeout(function() {
+      el.style.opacity = '0';
+      el.style.transform = 'translateY(8px)';
+      el.style.transition = 'all .25s';
+      setTimeout(function() { el.remove(); }, 280);
+    }, 3500);
+  }
+
+  // ── Loading overlay ─────────────────────────────────────
+  function showLoading(title, sub, pct) {
+    document.getElementById('loadingTitle').textContent = title || 'Procesando…';
+    document.getElementById('loadingSub').textContent   = sub   || '';
+    document.getElementById('progressFill').style.width = (pct || 0) + '%';
+    document.getElementById('loadingOverlay').hidden = false;
+  }
+
+  function updateLoading(title, sub, pct) {
+    if (title) document.getElementById('loadingTitle').textContent = title;
+    if (sub)   document.getElementById('loadingSub').textContent   = sub;
+    if (pct !== undefined) document.getElementById('progressFill').style.width = pct + '%';
+  }
+
+  function hideLoading() {
+    document.getElementById('loadingOverlay').hidden = true;
+  }
+
+  // ── Acceso al estado ────────────────────────────────────
+  function get(key) { return _state[key]; }
+  function set(key, val) { _state[key] = val; }
+
+  return {
+    goTo, saveSession, loadSession, logout, setPhoto, clearPhoto,
+    toast, showLoading, updateLoading, hideLoading, get, set, showFatal
+  };
+})();
+</script>

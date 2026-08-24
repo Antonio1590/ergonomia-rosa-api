@@ -1,0 +1,82 @@
+<script>
+// ============================================================
+// JS_Api — Llamadas al servidor via google.script.run
+// Todas las funciones retornan Promise<{ok, data?, error?}>
+// ============================================================
+
+var Api = (function() {
+
+  // Wrapper genérico: llama rpcHandler(params) en el servidor
+  function call(params) {
+    return new Promise(function(resolve, reject) {
+      google.script.run
+        .withSuccessHandler(function(result) {
+          // El servidor siempre retorna { ok, data?, error? }
+          resolve(result);
+        })
+        .withFailureHandler(function(err) {
+          reject(new Error(err.message || 'Error de servidor'));
+        })
+        .rpcHandler(params);
+    });
+  }
+
+  // Convierte File → base64 para enviar al servidor
+  function fileToBase64(file) {
+    return new Promise(function(resolve, reject) {
+      var reader = new FileReader();
+      reader.onload  = function(e) { resolve(e.target.result.split(',')[1]); };
+      reader.onerror = function()  { reject(new Error('Error leyendo archivo')); };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  return {
+    login: function(email, cedula) {
+      return call({ action: 'login', email: email, cedula: cedula });
+    },
+
+    saveEvaluation: function(record) {
+      return call({ action: 'saveEvaluation', record: record });
+    },
+
+    getEvaluations: function() {
+      return call({ action: 'getEvaluations' });
+    },
+
+    getUserHistory: function(email) {
+      return call({ action: 'getUserHistory', email: email });
+    },
+
+    getUsers: function() {
+      return call({ action: 'getUsers' });
+    },
+
+    saveTraining: function(record) {
+      return call({ action: 'saveTraining', record: record });
+    },
+
+    uploadPhoto: async function(file, email) {
+      var base64 = await fileToBase64(file);
+      return call({
+        action:        'uploadPhoto',
+        email:         email,
+        nombreArchivo: file.name || ('foto-' + Date.now() + '.jpg'),
+        mimeType:      file.type || 'image/jpeg',
+        base64:        base64
+      });
+    },
+
+    // El análisis corre en el servidor: la clave de Gemini nunca
+    // llega al navegador.
+    analizarFoto: async function(file) {
+      var base64 = await fileToBase64(file);
+      return call({
+        action:   'analyzePhoto',
+        mimeType: file.type || 'image/jpeg',
+        base64:   base64
+      });
+    }
+  };
+})();
+</script>

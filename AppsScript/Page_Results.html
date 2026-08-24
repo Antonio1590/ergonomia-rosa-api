@@ -1,0 +1,107 @@
+<div id="page-results" class="page">
+
+  <!-- Encabezado -->
+  <div class="results-head">
+    <div class="steps">
+      <div class="step-dot done">✓</div>
+      <div class="step-line done"></div>
+      <div class="step-dot done">✓</div>
+      <div class="step-line done"></div>
+      <div class="step-dot active">3</div>
+    </div>
+    <h1>Resultados de tu evaluación</h1>
+    <p class="text-sm" id="resultsDate"></p>
+  </div>
+
+  <!-- Puntaje principal -->
+  <div class="score-hero" id="scoreCard">
+    <div class="score-gauge">
+      <svg viewBox="0 0 200 112" width="200" aria-hidden="true">
+        <path d="M20 100 A80 80 0 0 1 180 100" fill="none"
+              stroke="#E8EDEA" stroke-width="14" stroke-linecap="round"/>
+        <path id="gaugeArc" d="M20 100 A80 80 0 0 1 180 100" fill="none"
+              stroke="#16A34A" stroke-width="14" stroke-linecap="round"
+              stroke-dasharray="251.3" stroke-dashoffset="251.3"/>
+      </svg>
+      <div class="score-value">
+        <span class="score-num" id="gaugeScore">—</span>
+        <span class="score-max" id="gaugeMax">de 10</span>
+      </div>
+    </div>
+
+    <div class="score-meta">
+      <span class="score-eyebrow">Puntaje ROSA</span>
+      <span class="badge badge-gray" id="riskBadge">—</span>
+      <p class="score-summary" id="scoreSummary"></p>
+      <p class="intervention-note" id="interventionNote" hidden>
+        El método ROSA fija en <strong>5</strong> el umbral a partir del cual
+        se recomienda intervención ergonómica.
+      </p>
+    </div>
+  </div>
+
+  <!-- Qué pudo medirse en la foto -->
+  <div id="qualityPanelResults" class="quality-panel" hidden></div>
+
+  <!-- Dos columnas -->
+  <div class="results-grid">
+
+    <!-- Columna izquierda: foto analizada -->
+    <div class="results-col">
+      <section id="photoSection" style="display:none;">
+        <p class="section-title">Tu postura analizada</p>
+        <div class="photo-card">
+          <div class="photo-canvas-wrap">
+            <canvas id="analysisCanvas" role="img"
+                    aria-label="Tu fotografía con puntos de color sobre las articulaciones,
+                                donde el color indica el estado de cada sección evaluada.
+                                El detalle en texto aparece en Puntaje por sección."></canvas>
+          </div>
+          <!-- Los colores coinciden con los de riesgo en todo el sistema -->
+          <div class="legend">
+            <span class="legend-item"><i class="legend-dot" style="background:#059669"></i>Aceptable</span>
+            <span class="legend-item"><i class="legend-dot" style="background:#CA8A04"></i>Revisar</span>
+            <span class="legend-item"><i class="legend-dot" style="background:#F43F5E"></i>Intervenir</span>
+            <span class="legend-item"><i class="legend-dot" style="background:#9F1239"></i>Prioritario</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="objectsSection" class="section" style="display:none;">
+        <p class="section-title">Objetos detectados</p>
+        <div class="detected-grid" id="detectedGrid"></div>
+      </section>
+    </div>
+
+    <!-- Columna derecha: recomendaciones y zonas -->
+    <div class="results-col">
+      <section id="recsSection" style="display:none;">
+        <p class="section-title">Qué corregir primero</p>
+        <ul class="rec-list" id="recList"></ul>
+      </section>
+
+      <section id="bodySection" class="section" style="display:none;">
+        <p class="section-title">Puntaje por sección</p>
+        <div class="body-parts" id="bodyParts"></div>
+      </section>
+    </div>
+
+  </div>
+
+  <!-- Ajuste manual: opcional, no obligatorio -->
+  <p class="results-refine">
+    ¿Algo no coincide con tu puesto?
+    <button class="link-btn" onclick="Questions.abrirAjuste()">Ajustar las respuestas</button>
+  </p>
+
+  <!-- Acciones -->
+  <div class="results-actions">
+    <button class="btn btn-ok btn-lg" id="btnSave" onclick="Analysis.save()">
+      Guardar evaluación
+    </button>
+    <button class="btn btn-outline btn-lg" onclick="Guide.startNew()">
+      Analizar otra foto
+    </button>
+  </div>
+
+</div>

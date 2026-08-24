@@ -1,0 +1,47 @@
+<div id="page-login" class="page">
+  <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2rem 1rem;">
+
+    <!-- Logo -->
+    <div style="text-align:center;margin-bottom:2rem;">
+      <svg width="64" height="64" viewBox="0 0 64 64" fill="none" style="margin:0 auto 1rem;">
+        <circle cx="32" cy="32" r="32" fill="#005224"/>
+        <path d="M16 46 Q32 18 48 46" stroke="#fff" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+        <circle cx="32" cy="22" r="5.5" fill="#16A34A"/>
+        <path d="M22 40 Q32 30 42 40" stroke="#16A34A" stroke-width="2" fill="none" stroke-linecap="round"/>
+      </svg>
+      <h1 style="color:var(--c-brand);font-size:1.75rem;">ROSA Expert</h1>
+      <p class="text-sm" style="margin-top:.35rem;">Evaluación ergonómica · Seguros Bolívar</p>
+    </div>
+
+    <!-- Tarjeta de login -->
+    <div class="card" style="width:min(100%,400px);">
+      <h2 style="margin-bottom:1.5rem;font-size:1.1rem;color:var(--c-text);">Ingresar</h2>
+
+      <form id="loginForm" onsubmit="return false;">
+        <div class="field">
+          <label for="loginEmail">Correo corporativo</label>
+          <input class="input" id="loginEmail" type="email"
+                 placeholder="nombre@segurosbolivar.com" autocomplete="email" required>
+        </div>
+
+        <div class="field mt-4">
+          <label for="loginCedula">Número de cédula</label>
+          <input class="input" id="loginCedula" type="tel"
+                 placeholder="Ej: 80123456" autocomplete="off"
+                 inputmode="numeric" pattern="[0-9]{6,12}" required>
+        </div>
+
+        <p class="field-error" id="loginError" style="display:none;margin-top:.75rem;"></p>
+
+        <button class="btn btn-primary btn-full mt-6" type="submit" id="btnLogin"
+                onclick="Guide.handleLogin()">
+          Ingresar
+        </button>
+      </form>
+    </div>
+
+    <p class="text-xs text-muted" style="margin-top:1.5rem;">
+      © Seguros Bolívar · Uso interno
+    </p>
+  </div>
+</div>

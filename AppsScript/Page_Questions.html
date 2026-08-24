@@ -1,0 +1,197 @@
+<div id="page-questions" class="page">
+
+  <div class="results-head">
+    <div class="steps">
+      <div class="step-dot done">✓</div>
+      <div class="step-line done"></div>
+      <div class="step-dot active">2</div>
+      <div class="step-line"></div>
+      <div class="step-dot pending">3</div>
+    </div>
+    <h1>Ajustar respuestas</h1>
+    <p class="text-sm">
+      Tu evaluación ya se calculó automáticamente desde la foto.
+      Cambia aquí solo lo que no coincida con tu puesto.
+    </p>
+  </div>
+
+  <!-- Calidad del encuadre -->
+  <div id="qualityPanel" class="quality-panel" hidden></div>
+
+  <div class="q-layout">
+
+    <!-- Referencia: la foto analizada -->
+    <aside class="q-aside">
+      <div class="photo-card">
+        <div class="photo-canvas-wrap">
+          <canvas id="questionCanvas" role="img"
+                  aria-label="Tu fotografía con las articulaciones detectadas marcadas,
+                              como referencia para responder el cuestionario."></canvas>
+        </div>
+        <div class="legend">
+          <span class="legend-item">
+            <i class="legend-dot" style="background:#006D32"></i>
+            Articulaciones detectadas en tu foto
+          </span>
+        </div>
+      </div>
+      <p class="q-aside-note" id="qDetected"></p>
+    </aside>
+
+    <!-- Formulario -->
+    <form class="q-form" id="questionForm" onsubmit="return false;">
+
+      <!-- ─────────── SILLA ─────────── -->
+      <fieldset class="q-group">
+        <legend class="q-legend"><span class="q-num">A</span> Silla</legend>
+
+        <div class="q-item" data-q="seatHeight">
+          <p class="q-label">Con los pies apoyados, ¿cómo quedan tus rodillas?</p>
+          <div class="q-options">
+            <label class="q-opt"><input type="radio" name="seatHeight" value="ok"><span>En ángulo recto (90°)</span></label>
+            <label class="q-opt"><input type="radio" name="seatHeight" value="low"><span>Más altas que la cadera</span></label>
+            <label class="q-opt"><input type="radio" name="seatHeight" value="high"><span>Más bajas que la cadera</span></label>
+          </div>
+        </div>
+
+        <div class="q-item" data-q="feet">
+          <p class="q-label">¿Cómo apoyas los pies?</p>
+          <div class="q-options">
+            <label class="q-opt"><input type="radio" name="feet" value="floor"><span>Planos en el piso</span></label>
+            <label class="q-opt"><input type="radio" name="feet" value="footrest"><span>Sobre un reposapiés</span></label>
+            <label class="q-opt"><input type="radio" name="feet" value="dangling"><span>Cuelgan o se apoyan en la silla</span></label>
+          </div>
+        </div>
+
+        <div class="q-item" data-q="panDepth">
+          <p class="q-label">Espacio entre el borde del asiento y la parte de atrás de tus rodillas</p>
+          <div class="q-options">
+            <label class="q-opt"><input type="radio" name="panDepth" value="ok"><span>Cabe el ancho de 3 dedos</span></label>
+            <label class="q-opt"><input type="radio" name="panDepth" value="short"><span>Menos: el asiento es corto</span></label>
+            <label class="q-opt"><input type="radio" name="panDepth" value="long"><span>Más: el asiento presiona mis rodillas</span></label>
+          </div>
+        </div>
+
+        <div class="q-item" data-q="armrest">
+          <p class="q-label">Apoyabrazos</p>
+          <div class="q-options">
+            <label class="q-opt"><input type="radio" name="armrest" value="ok"><span>Codos apoyados, hombros relajados</span></label>
+            <label class="q-opt"><input type="radio" name="armrest" value="bad"><span>Quedan muy altos o muy bajos</span></label>
+            <label class="q-opt"><input type="radio" name="armrest" value="none"><span>La silla no tiene</span></label>
+          </div>
+          <div class="q-checks">
+            <label class="q-check"><input type="checkbox" name="armrestHard"><span>Superficie dura o dañada</span></label>
+            <label class="q-check"><input type="checkbox" name="armrestWide"><span>Más separados que mis hombros</span></label>
+          </div>
+        </div>
+
+        <div class="q-item" data-q="backSupport">
+          <p class="q-label">Respaldo</p>
+          <div class="q-options">
+            <label class="q-opt"><input type="radio" name="backSupport" value="ok"><span>Apoya mi zona lumbar, espalda erguida</span></label>
+            <label class="q-opt"><input type="radio" name="backSupport" value="nolumbar"><span>No apoya la zona lumbar</span></label>
+            <label class="q-opt"><input type="radio" name="backSupport" value="reclined"><span>Queda muy reclinado</span></label>
+            <label class="q-opt"><input type="radio" name="backSupport" value="forward"><span>Trabajo inclinado hacia adelante</span></label>
+          </div>
+        </div>
+
+        <div class="q-checks q-item">
+          <label class="q-check"><input type="checkbox" name="underDesk"><span>Tengo poco espacio para las piernas bajo el escritorio</span></label>
+          <label class="q-check"><input type="checkbox" name="surfaceHigh"><span>Encojo los hombros al apoyar los brazos</span></label>
+        </div>
+
+        <div class="q-item">
+          <p class="q-label">¿Qué partes de tu silla <strong>no</strong> se pueden ajustar?</p>
+          <div class="q-checks">
+            <label class="q-check"><input type="checkbox" name="alturaNoAjustable"><span>La altura del asiento</span></label>
+            <label class="q-check"><input type="checkbox" name="profundidadNoAjustable"><span>La profundidad del asiento</span></label>
+            <label class="q-check"><input type="checkbox" name="apoyabrazosNoAjustable"><span>Los apoyabrazos</span></label>
+            <label class="q-check"><input type="checkbox" name="respaldoNoAjustable"><span>El respaldo</span></label>
+          </div>
+        </div>
+      </fieldset>
+
+      <!-- ─────────── MONITOR Y TELÉFONO ─────────── -->
+      <fieldset class="q-group">
+        <legend class="q-legend"><span class="q-num">B</span> Monitor y teléfono</legend>
+
+        <div class="q-item" data-q="monitorHeight">
+          <p class="q-label">El borde superior de la pantalla queda…</p>
+          <div class="q-options">
+            <label class="q-opt"><input type="radio" name="monitorHeight" value="ok"><span>A la altura de mis ojos</span></label>
+            <label class="q-opt"><input type="radio" name="monitorHeight" value="low"><span>Más abajo: bajo la cabeza</span></label>
+            <label class="q-opt"><input type="radio" name="monitorHeight" value="high"><span>Más arriba: levanto la cabeza</span></label>
+          </div>
+        </div>
+
+        <div class="q-item" data-q="monitorDistance">
+          <p class="q-label">Distancia a la pantalla</p>
+          <div class="q-options">
+            <label class="q-opt"><input type="radio" name="monitorDistance" value="ok"><span>Un brazo extendido (40–75 cm)</span></label>
+            <label class="q-opt"><input type="radio" name="monitorDistance" value="near"><span>Más cerca</span></label>
+            <label class="q-opt"><input type="radio" name="monitorDistance" value="far"><span>Más lejos</span></label>
+          </div>
+        </div>
+
+        <div class="q-item" data-q="phone">
+          <p class="q-label">Cuando hablas por teléfono</p>
+          <div class="q-options">
+            <label class="q-opt"><input type="radio" name="phone" value="headset"><span>Uso diadema o altavoz</span></label>
+            <label class="q-opt"><input type="radio" name="phone" value="hand"><span>Lo sostengo con la mano</span></label>
+            <label class="q-opt"><input type="radio" name="phone" value="cradle"><span>Entre el hombro y la oreja</span></label>
+            <label class="q-opt"><input type="radio" name="phone" value="none"><span>No uso teléfono</span></label>
+          </div>
+        </div>
+
+        <div class="q-checks q-item">
+          <label class="q-check"><input type="checkbox" name="neckTwist"><span>Giro el cuello más de 30° para ver la pantalla</span></label>
+          <label class="q-check"><input type="checkbox" name="glare"><span>Hay reflejos o brillos en la pantalla</span></label>
+          <label class="q-check"><input type="checkbox" name="sinAtril"><span>Consulto documentos impresos sin atril</span></label>
+          <label class="q-check"><input type="checkbox" name="phoneReach"><span>El teléfono queda a más de 30 cm de mi alcance</span></label>
+          <label class="q-check"><input type="checkbox" name="sinManosLibres"><span>No tengo diadema ni altavoz disponible</span></label>
+        </div>
+      </fieldset>
+
+      <!-- ─────────── MOUSE Y TECLADO ─────────── -->
+      <fieldset class="q-group">
+        <legend class="q-legend"><span class="q-num">C</span> Mouse y teclado</legend>
+
+        <div class="q-checks q-item">
+          <label class="q-check"><input type="checkbox" name="mouseAligned" checked><span>El mouse queda alineado con mi hombro</span></label>
+          <label class="q-check"><input type="checkbox" name="mouseSameSurface" checked><span>Mouse y teclado en la misma superficie</span></label>
+          <label class="q-check"><input type="checkbox" name="pinchGrip"><span>Sujeto el mouse con los dedos en pinza</span></label>
+          <label class="q-check"><input type="checkbox" name="apoyaMunecas"><span>Hay un apoyamuñecas delante del mouse</span></label>
+          <label class="q-check"><input type="checkbox" name="wristStraight" checked><span>Mis muñecas quedan rectas al escribir</span></label>
+          <label class="q-check"><input type="checkbox" name="wristDeviated"><span>Desvío las muñecas hacia los lados</span></label>
+          <label class="q-check"><input type="checkbox" name="keyboardHigh"><span>Encojo los hombros al escribir</span></label>
+          <label class="q-check"><input type="checkbox" name="alcanceElevado"><span>Alcanzo objetos por encima de los hombros</span></label>
+          <label class="q-check"><input type="checkbox" name="bandejaNoAjustable"><span>La bandeja del teclado no es ajustable</span></label>
+        </div>
+      </fieldset>
+
+      <!-- ─────────── JORNADA ─────────── -->
+      <fieldset class="q-group">
+        <legend class="q-legend"><span class="q-num">D</span> Jornada</legend>
+        <div class="q-item" data-q="duration">
+          <p class="q-label">¿Cuántas horas al día usas este puesto?</p>
+          <div class="q-options">
+            <label class="q-opt"><input type="radio" name="duration" value="lt1"><span>Menos de 1 hora</span></label>
+            <label class="q-opt"><input type="radio" name="duration" value="1to4"><span>Entre 1 y 4 horas</span></label>
+            <label class="q-opt"><input type="radio" name="duration" value="gt4"><span>Más de 4 horas</span></label>
+          </div>
+        </div>
+      </fieldset>
+
+    </form>
+  </div>
+
+  <div class="results-actions">
+    <button class="btn btn-primary btn-lg" onclick="Questions.submit()">
+      Recalcular mi resultado
+    </button>
+    <button class="btn btn-outline btn-lg" onclick="App.goTo('results')">
+      Volver sin cambios
+    </button>
+  </div>
+
+</div>

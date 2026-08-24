@@ -1,0 +1,157 @@
+<script>
+// ============================================================
+// JS_History — Historial personal del colaborador
+// ============================================================
+
+var History = (function() {
+
+  var _datos    = [];
+  var _verTabla = false;
+
+  function fechaCorta(iso) {
+    var d = new Date(iso);
+    return d.toLocaleDateString('es-CO', { day:'numeric', month:'short' });
+  }
+
+  function fechaLarga(iso) {
+    var d = new Date(iso);
+    return d.toLocaleDateString('es-CO', { day:'numeric', month:'long', year:'numeric' });
+  }
+
+  // ── Cargar ───────────────────────────────────────────────
+  async function load() {
+    var user = App.get('user');
+    if (!user) return;
+
+    document.getElementById('histChart').innerHTML =
+      '<p class="chart-empty">Cargando…</p>';
+
+    try {
+      var r = await Api.getUserHistory(user.email);
+      if (!r.ok) throw new Error(r.error);
+      _datos = r.data || [];
+      render();
+    } catch (err) {
+      App.toast('No se pudo cargar tu historial: ' + err.message, 'error');
+      document.getElementById('histChart').innerHTML =
+        '<p class="chart-empty">No se pudo cargar el historial.</p>';
+    }
+  }
+
+  // ── Render ───────────────────────────────────────────────
+  function render() {
+    var hero = document.getElementById('histHero');
+
+    if (!_datos.length) {
+      hero.hidden = true;
+      document.getElementById('histChart').innerHTML =
+        '<p class="chart-empty">Aún no tienes evaluaciones guardadas.</p>';
+      document.getElementById('histList').innerHTML = '';
+      return;
+    }
+
+    var ultima    = _datos[_datos.length - 1];
+    var penultima = _datos.length > 1 ? _datos[_datos.length - 2] : null;
+
+    // Resumen
+    hero.hidden = false;
+    var score = document.getElementById('histScore');
+    score.textContent = ultima.puntajeFinal;
+    score.style.color = Charts.RIESGO[ultima.nivelRiesgo] || '#006D32';
+
+    var badge = document.getElementById('histBadge');
+    badge.textContent = 'Riesgo ' + ultima.nivelRiesgo;
+    badge.className   = 'badge ' + badgeClase(ultima.nivelRiesgo);
+
+    renderDelta(ultima, penultima);
+
+    // Gráfica
+    Charts.linea('histChart', _datos.map(function(d) {
+      return {
+        valor: d.puntajeFinal,
+        nivel: d.nivelRiesgo,
+        etiqueta: fechaCorta(d.fecha),
+        etiquetaLarga: fechaLarga(d.fecha)
+      };
+    }), { maxY: 10, umbral: 5, aria: 'Tu puntaje ROSA a lo largo del tiempo' });
+
+    renderLista();
+    renderTabla();
+  }
+
+  function badgeClase(nivel) {
+    if (nivel === 'Bajo')  return 'badge-green';
+    if (nivel === 'Medio') return 'badge-yellow';
+    return 'badge-red';
+  }
+
+  // Cambio respecto a la evaluación anterior
+  function renderDelta(ultima, penultima) {
+    var el = document.getElementById('histDelta');
+
+    if (!penultima) {
+      el.innerHTML = '<p class="hist-delta-text">' +
+        'Esta es tu primera evaluación. Repítela en unas semanas para ver tu avance.</p>';
+      return;
+    }
+
+    var dif = ultima.puntajeFinal - penultima.puntajeFinal;
+
+    if (dif === 0) {
+      el.innerHTML = '<span class="hist-trend igual">Sin cambio</span>' +
+        '<p class="hist-delta-text">Tu puntaje se mantiene igual que la evaluación anterior.</p>';
+    } else if (dif < 0) {
+      // En ROSA un puntaje menor es mejor
+      el.innerHTML = '<span class="hist-trend mejora">▼ ' + Math.abs(dif) + ' punto' +
+        (Math.abs(dif) === 1 ? '' : 's') + '</span>' +
+        '<p class="hist-delta-text">Mejoraste: bajaste de ' + penultima.puntajeFinal +
+        ' a ' + ultima.puntajeFinal + '.</p>';
+    } else {
+      el.innerHTML = '<span class="hist-trend empeora">▲ ' + dif + ' punto' +
+        (dif === 1 ? '' : 's') + '</span>' +
+        '<p class="hist-delta-text">Tu puntaje subió de ' + penultima.puntajeFinal +
+        ' a ' + ultima.puntajeFinal + '. Revisa las recomendaciones.</p>';
+    }
+  }
+
+  function renderLista() {
+    var recientes = _datos.slice().reverse();
+    document.getElementById('histList').innerHTML = recientes.map(function(d) {
+      var color = Charts.RIESGO[d.nivelRiesgo] || '#6B7280';
+      var foto  = d.urlImagen
+        ? '<a href="' + d.urlImagen + '" target="_blank" rel="noopener" class="hist-photo">Ver foto</a>'
+        : '';
+      return '<div class="hist-item">' +
+               '<span class="hist-dot" style="background:' + color + '"></span>' +
+               '<div class="hist-item-main">' +
+                 '<span class="hist-item-date">' + fechaLarga(d.fecha) + '</span>' +
+                 '<span class="hist-item-sub">Silla ' + d.silla +
+                   ' · Monitor ' + d.pantalla + ' · Mouse ' + d.teclado + '</span>' +
+               '</div>' +
+               '<span class="hist-item-score">' + d.puntajeFinal + '</span>' +
+               foto +
+             '</div>';
+    }).join('');
+  }
+
+  function renderTabla() {
+    var filas = _datos.slice().reverse().map(function(d) {
+      return [fechaLarga(d.fecha), d.puntajeFinal, d.nivelRiesgo,
+              d.silla, d.pantalla, d.teclado];
+    });
+    document.getElementById('histTable').innerHTML = Charts.tabla(
+      filas, ['Fecha', 'Puntaje', 'Riesgo', 'Silla', 'Monitor', 'Mouse']
+    );
+  }
+
+  function toggleTable() {
+    _verTabla = !_verTabla;
+    document.getElementById('histList').hidden  = _verTabla;
+    document.getElementById('histTable').hidden = !_verTabla;
+    document.getElementById('histToggle').textContent =
+      _verTabla ? 'Ver como lista' : 'Ver como tabla';
+  }
+
+  return { load: load, toggleTable: toggleTable };
+})();
+</script>

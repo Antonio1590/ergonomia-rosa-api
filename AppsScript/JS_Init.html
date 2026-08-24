@@ -1,0 +1,107 @@
+<script>
+// ============================================================
+// JS_Init — Arranque de la aplicación SPA
+// ============================================================
+
+(function() {
+
+  // Plantillas y módulos que la app necesita para funcionar.
+  // Pose se omite: es un módulo ES y se carga de forma diferida.
+  var PANTALLAS = ['login', 'guide', 'questions', 'results', 'history', 'dashboard'];
+  var MODULOS   = {
+    'Photos':    'Photos',
+    'Api':       'JS_Api',
+    'Rosa':      'JS_Rosa',
+    'Analysis':  'JS_Analysis',
+    'Quality':   'JS_Quality',
+    'Questions': 'JS_Questions',
+    'Guide':     'JS_Guide',
+    'Charts':    'JS_Charts',
+    'History':   'JS_History',
+    'Dashboard': 'JS_Dashboard'
+  };
+
+  // Verifica la integridad antes de navegar: así un archivo mal
+  // nombrado en Apps Script se reporta con nombre en vez de dejar
+  // la pantalla en blanco.
+  function revisarInstalacion() {
+    var faltanPantallas = PANTALLAS.filter(function(id) {
+      return !document.getElementById('page-' + id);
+    });
+
+    if (faltanPantallas.length) {
+      App.showFatal(
+        'Faltan pantallas en el proyecto',
+        'No se encontraron: <strong>' +
+        faltanPantallas.map(function(p) {
+          return 'Page_' + p.charAt(0).toUpperCase() + p.slice(1);
+        }).join(', ') +
+        '</strong>.<br>Créalas en Apps Script como archivos HTML (sin la extensión .html) ' +
+        'e inclúyelas en <strong>Index</strong>.'
+      );
+      return false;
+    }
+
+    var faltanModulos = Object.keys(MODULOS).filter(function(nombre) {
+      return typeof window[nombre] === 'undefined';
+    });
+
+    if (faltanModulos.length) {
+      App.showFatal(
+        'Faltan módulos de código',
+        'No se cargaron: <strong>' +
+        faltanModulos.map(function(m) { return MODULOS[m]; }).join(', ') +
+        '</strong>.<br>Verifica que existan en Apps Script y estén incluidos en <strong>Index</strong>.'
+      );
+      return false;
+    }
+
+    return true;
+  }
+
+  function init() {
+    if (typeof App === 'undefined') {
+      document.body.innerHTML =
+        '<p style="padding:2rem;font-family:system-ui;color:#DC2626">' +
+        'No se cargó <strong>JS_State</strong>. Revisa que el archivo exista en Apps Script ' +
+        'y esté incluido en <strong>Index</strong>.</p>';
+      return;
+    }
+
+    if (!revisarInstalacion()) return;
+
+    if (App.loadSession()) {
+      App.goTo('guide');
+      Guide.initGuidePage();
+
+      var usuario = App.get('user');
+      if (window.location.hash === '#dashboard' && usuario && usuario.esAdmin) {
+        App.goTo('dashboard');
+        Dashboard.load();
+      }
+    } else {
+      App.goTo('login');
+    }
+
+    var btnDash = document.getElementById('btnDashboard');
+    if (btnDash) {
+      btnDash.addEventListener('click', function() { Dashboard.load(); });
+    }
+
+    var form = document.getElementById('loginForm');
+    if (form) {
+      form.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); Guide.handleLogin(); }
+      });
+    }
+
+    document.addEventListener('touchstart', function(){}, { passive: true });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>

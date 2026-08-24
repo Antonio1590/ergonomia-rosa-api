@@ -1,0 +1,44 @@
+<div id="page-history" class="page">
+
+  <div class="results-head">
+    <h1>Mi historial</h1>
+    <p class="text-sm">Evolución de tus evaluaciones ergonómicas.</p>
+  </div>
+
+  <!-- Resumen: puntaje actual y cambio -->
+  <div class="score-hero" id="histHero" hidden>
+    <div class="hist-current">
+      <span class="score-eyebrow">Última evaluación</span>
+      <span class="hist-score" id="histScore">—</span>
+      <span class="badge badge-gray" id="histBadge">—</span>
+    </div>
+    <div class="hist-delta" id="histDelta"></div>
+  </div>
+
+  <!-- Evolución -->
+  <section class="section">
+    <p class="section-title">Evolución del puntaje</p>
+    <div class="chart-card">
+      <div id="histChart"></div>
+    </div>
+  </section>
+
+  <!-- Detalle -->
+  <section class="section">
+    <div class="flex items-center justify-between" style="margin-bottom:.75rem;">
+      <p class="section-title" style="margin:0;">Todas tus evaluaciones</p>
+      <button class="btn btn-sm btn-outline" id="histToggle" onclick="History.toggleTable()">
+        Ver como tabla
+      </button>
+    </div>
+    <div id="histList"></div>
+    <div id="histTable" hidden></div>
+  </section>
+
+  <div class="results-actions">
+    <button class="btn btn-primary btn-lg" onclick="Guide.startNew()">
+      Nueva evaluación
+    </button>
+  </div>
+
+</div>
