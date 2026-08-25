@@ -2,6 +2,78 @@
 
 Registro de cambios importantes. Formato: fecha, qué cambió, por qué.
 
+## 2026-08-25 — Seis mejoras de experiencia (usuario + admin)
+
+A raíz de la pregunta "¿qué más podemos mejorar para la experiencia del
+usuario y el administrador?" se implementaron las 6 mejoras propuestas,
+apoyadas directamente en brechas ya documentadas en `docs/AUDIT.md` y
+`docs/PARITY_MATRIX.md`.
+
+### 1. Historial personal (`src/pages/HistoryPage.tsx`, ruta `/historial`)
+Apps Script ya tenía `handleGetUserHistory` pero React nunca lo llamaba —
+un colaborador no tenía forma de ver su propia evolución. Se agregó
+`getUserHistory(email)` a `SheetsService.ts` (mismo shape que el backend)
+y una página nueva con score+tendencia, gráfico de barras y lista completa
+de evaluaciones con enlace a Drive. Enlazada desde la barra de navegación
+de `AutoEvaluationPage.tsx` ("Mi historial").
+**Nota:** verificado en vivo que el despliegue de producción de Apps
+Script está desactualizado respecto al repo (`"Acción desconocida:
+getUserHistory"` en el backend real) — el código de React es correcto,
+pero esta funcionalidad no operará hasta que se redespliegue manualmente
+desde script.google.com.
+
+### 2. Aviso de calidad de foto (`AutoEvaluationPage.tsx`)
+Apps Script tenía verificación de calidad vía Gemini; React no tenía
+ninguna. En vez de depender de Gemini (que la Fase 12 del plan original
+dejó explícitamente sin conectar), se añadió `assessPhotoQuality()` que
+usa únicamente las señales que MediaPipe ya calcula (`.visibility` de
+rodillas/tobillos y promedio general) para avisar cuando la foto no
+muestra el cuerpo completo o tiene mala nitidez/luz — mostrado como
+tarjeta ámbar junto al puntaje en la fase de resultados.
+
+### 3. Guardar borrador / reanudar (`src/hooks/useDraft.ts`, `AutoEvaluationPage.tsx`)
+El hook `useDraft` existía pero estaba muerto — construido para el wizard
+de pasos que ya no se usa. Se reescribió como hook genérico y se conectó
+al flujo real de una sola pasada: al llegar a resultados se guarda el
+`CombinedResult` calculado (no la foto, que no sobrevive un recargue) en
+`localStorage`; si el usuario vuelve a entrar sin haber guardado, ve un
+banner para retomar o descartar el borrador. Se descarta automáticamente
+al guardar la evaluación con éxito.
+
+### 4. Detalle de evaluación en el panel admin (`AdminDashboard.tsx`)
+La tabla de evaluaciones solo mostraba filas agregadas, sin forma de ver
+el detalle de una en particular. Se agregó un modal (click en cualquier
+fila) con puntaje, riesgo, desglose silla/pantalla/teclado, objetos
+detectados y recomendaciones — reutiliza `parseDetalles()` ya existente.
+
+### 5. Alerta de riesgo alto (`AdminDashboard.tsx`)
+Antes había que revisar la tabla completa para notar casos de riesgo
+Alto/Muy Alto. Se agregó una tarjeta roja "Casos que necesitan atención
+pronto" (hasta 5 más recientes) justo debajo de los KPIs, cuyas filas
+abren el mismo modal de detalle del punto 4.
+
+### 6. Migración de etiquetas de riesgo viejas (`AppsScript/Sheets.gs`)
+Antes de unificar la escala de riesgo a 4 niveles, filas viejas de la
+hoja real `Registros` quedaron con etiquetas de la escala vieja de React
+de 5 niveles (p.ej. "Mejorable") que ya no existen en el sistema unificado
+(Bajo/Medio/Alto/Muy Alto de `nivelRiesgo()` en `JS_Rosa.html`). Se agregó
+`migrarNivelesRiesgoAntiguos(dryRun)`: recalcula la etiqueta desde el
+puntaje ya guardado en cada fila. Disparo exclusivamente manual desde el
+editor de Apps Script (mismo patrón que `configurarProyecto()`), con
+`dryRun=true` por defecto — solo registra en el log qué cambiaría, sin
+tocar la hoja, hasta correrla explícitamente con `false`. Idempotente:
+nunca toca una fila que ya tiene una etiqueta válida. **Pendiente de
+ejecución real** — no se corrió contra la hoja de producción; requiere
+que el usuario la dispare manualmente cuando esté listo, revisando primero
+el resultado del dry run.
+
+### Verificación
+`npm run build` y `npm run lint` limpios (11 errores + 1 advertencia,
+mismos preexistentes de código muerto documentados en la limpieza del
+2026-08-24). Puntos 1, 4 y 5 verificados en vivo contra datos reales de
+producción (sin escribir nada). El punto 6 no se puede verificar en vivo
+sin mutar datos reales — revisado por lectura de código únicamente.
+
 ## 2026-08-24 (continuación 3) — Limpieza de archivos vacíos
 
 Eliminados los 5 archivos que estaban en 0 bytes desde su creación

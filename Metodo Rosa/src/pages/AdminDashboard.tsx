@@ -56,6 +56,7 @@ export default function AdminDashboard() {
 
   const [userQuery, setUserQuery] = useState("");
   const [userRole, setUserRole]   = useState("todos");
+  const [selectedEval, setSelectedEval] = useState<EvaluationRecord | null>(null);
 
   useEffect(() => {
     Promise.all([getAllEvaluations(), getAllUsers()])
@@ -118,6 +119,16 @@ export default function AdminDashboard() {
   /* ── Filtros reales de evaluaciones ── */
   const riskOptions = useMemo(
     () => Array.from(new Set(evaluations.map((e) => e.nivelRiesgo).filter(Boolean))).sort(),
+    [evaluations]
+  );
+
+  // Casos que necesitan seguimiento pronto: los más recientes en Alto/Muy
+  // Alto. Sin esto, un admin solo se entera si revisa la tabla completa.
+  const urgentCases = useMemo(
+    () => evaluations
+      .filter((e) => e.nivelRiesgo === "Alto" || e.nivelRiesgo === "Muy Alto")
+      .slice(-5)
+      .reverse(),
     [evaluations]
   );
 
@@ -396,6 +407,36 @@ export default function AdminDashboard() {
             </div>
           </div>
 
+          {/* ── Casos que necesitan atención ── */}
+          {urgentCases.length > 0 && (
+            <div className="bg-red-50 border border-red-200 rounded-2xl p-5 mb-8">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="material-symbols-outlined text-red-600">warning</span>
+                <h3 className="font-bold text-red-800 text-sm">Casos que necesitan atención pronto</h3>
+                <span className="ml-auto text-xs font-bold bg-red-600 text-white px-2 py-0.5 rounded-full">
+                  {evaluations.filter((e) => e.nivelRiesgo === "Alto" || e.nivelRiesgo === "Muy Alto").length}
+                </span>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                {urgentCases.map((ev, i) => {
+                  const cfg = riskCfg(ev.nivelRiesgo);
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => setSelectedEval(ev)}
+                      className="flex items-center gap-3 bg-white rounded-xl px-3 py-2 text-left hover:bg-red-50/60 transition border border-red-100"
+                    >
+                      <span className="text-sm font-black shrink-0 w-6" style={{ color: cfg.hex }}>{ev.puntajeFinal}</span>
+                      <span className="text-sm font-semibold text-gray-800 truncate flex-1">{ev.nombre || ev.email}</span>
+                      <span className="text-xs text-gray-400 shrink-0">{new Date(ev.fecha).toLocaleDateString("es-CO")}</span>
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full shrink-0 ${cfg.badge}`}>{ev.nivelRiesgo}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* ── Contenido según sección ── */}
           {/* El selector de abajo es la única forma de llegar a "Reportes" en
               pantallas donde el sidebar (lg:flex) o el nav superior (md:flex)
@@ -543,7 +584,8 @@ export default function AdminDashboard() {
                             const objetos = parseDetalles(ev.detalles).objetos;
                             const objetosTxt = Array.isArray(objetos) ? objetos.join(", ") : (objetos || "");
                             return (
-                              <tr key={i} className="hover:bg-[#f8f9ff] transition">
+                              <tr key={i} onClick={() => setSelectedEval(ev)}
+                                className="hover:bg-[#f8f9ff] transition cursor-pointer">
                                 <td className="px-5 py-4 text-sm text-gray-500">
                                   {new Date(ev.fecha).toLocaleDateString("es-CO")}
                                 </td>
@@ -647,6 +689,97 @@ export default function AdminDashboard() {
           </div>
         </div>
       </footer>
+
+      {/* ── Detalle de evaluación ── */}
+      {selectedEval && (() => {
+        const cfg = riskCfg(selectedEval.nivelRiesgo);
+        const det = parseDetalles(selectedEval.detalles);
+        const objetos = Array.isArray(det.objetos) ? det.objetos : (det.objetos ? [det.objetos] : []);
+        const recs = (selectedEval.recomendaciones || "")
+          .split("|").map((r) => r.trim()).filter(Boolean);
+        return (
+          <div
+            className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4"
+            onClick={() => setSelectedEval(null)}
+          >
+            <div
+              className="bg-white rounded-3xl max-w-lg w-full max-h-[85vh] overflow-y-auto shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6 border-b border-gray-100 flex items-start justify-between gap-4">
+                <div>
+                  <p className="font-bold text-lg text-gray-900">{selectedEval.nombre || selectedEval.email}</p>
+                  <p className="text-sm text-gray-400">
+                    {selectedEval.cedula ? `Cédula ${selectedEval.cedula} · ` : ""}
+                    {new Date(selectedEval.fecha).toLocaleDateString("es-CO", { day: "numeric", month: "long", year: "numeric" })}
+                  </p>
+                </div>
+                <button onClick={() => setSelectedEval(null)} className="text-gray-400 hover:text-gray-600 transition shrink-0">
+                  <span className="material-symbols-outlined">close</span>
+                </button>
+              </div>
+
+              <div className="p-6 space-y-5">
+                <div className="flex items-center gap-4">
+                  <span className="text-4xl font-black" style={{ color: cfg.hex }}>{selectedEval.puntajeFinal}</span>
+                  <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${cfg.badge}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+                    Riesgo {selectedEval.nivelRiesgo}
+                  </span>
+                </div>
+
+                {(det.silla || det.pantalla || det.teclado) && (
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { label: "Silla", value: det.silla },
+                      { label: "Pantalla", value: det.pantalla },
+                      { label: "Teclado/mouse", value: det.teclado },
+                    ].map(({ label, value }) => (
+                      <div key={label} className="bg-gray-50 rounded-xl p-3 text-center">
+                        <p className="text-xl font-black text-gray-800">{value ?? "—"}</p>
+                        <p className="text-[11px] text-gray-400">{label}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {objetos.length > 0 && (
+                  <div>
+                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Objetos detectados</p>
+                    <div className="flex flex-wrap gap-2">
+                      {objetos.map((o, i) => (
+                        <span key={i} className="text-xs font-semibold bg-[#EEF7F2] text-[#005224] px-2.5 py-1 rounded-full">{o}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {recs.length > 0 && (
+                  <div>
+                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Recomendaciones</p>
+                    <ul className="space-y-2">
+                      {recs.map((r, i) => (
+                        <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                          <span className="w-5 h-5 rounded-full bg-orange-50 text-[#FF6B00] text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
+                          {r}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {selectedEval.urlImagen && (
+                  <a href={selectedEval.urlImagen} target="_blank" rel="noreferrer"
+                    className="inline-flex items-center gap-2 text-sm font-semibold text-[#006D32] hover:text-[#005224]">
+                    <span className="material-symbols-outlined text-base">image</span>
+                    Ver foto en Drive
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

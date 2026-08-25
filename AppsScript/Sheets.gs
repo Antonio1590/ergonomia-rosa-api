@@ -125,3 +125,85 @@ function handleGetUsers() {
 
   return { ok: true, data: result };
 }
+
+// ============================================================
+// MIGRACIÓN — normaliza etiquetas viejas de "Riesgo" (columna D)
+// ============================================================
+//
+// Antes de unificar la escala de riesgo, el front de React usaba 5
+// niveles propios (p.ej. "Mejorable", "Inapreciable", "Extremo") que ya
+// no existen en el sistema — la escala vigente es la de JS_Rosa.html:
+// nivelRiesgo(), con 4 niveles (Bajo/Medio/Alto/Muy Alto). Las filas
+// guardadas antes de la unificación quedaron con esas etiquetas viejas
+// en la hoja "Registros" y esto las recalcula a partir del puntaje que
+// cada fila ya tiene guardado en la columna C.
+//
+// No se ejecuta sola ni se llama desde rpcHandler — es exclusivamente
+// de disparo manual desde el editor de Apps Script, igual que
+// configurarProyecto() en Code.gs.
+//
+// CÓMO USARLA (en este orden, desde el editor → seleccionar función →
+// Ejecutar):
+//   1. migrarNivelesRiesgoAntiguos()        // dry run: no escribe nada
+//      → revisa el resultado en Ver → Registros de ejecución
+//   2. migrarNivelesRiesgoAntiguos(false)   // aplica los cambios listados
+//
+// Es idempotente: una fila que ya tiene una etiqueta válida (Bajo/Medio/
+// Alto/Muy Alto) nunca se toca, así que correrla varias veces es seguro.
+
+/** Misma tabla de umbrales que nivelRiesgo() en JS_Rosa.html — no se
+ *  puede reusar esa función directamente porque vive en un <script>
+ *  del lado cliente (HTML), fuera del alcance de los archivos .gs. */
+function nivelRiesgoDesdeScore_(p) {
+  if (p <= 2) return 'Bajo';
+  if (p <= 4) return 'Medio';
+  if (p <= 7) return 'Alto';
+  return 'Muy Alto';
+}
+
+function migrarNivelesRiesgoAntiguos(dryRun) {
+  if (dryRun === undefined) dryRun = true;
+
+  var ETIQUETAS_VALIDAS = ['Bajo', 'Medio', 'Alto', 'Muy Alto'];
+  var sheet = getSheet('Registros');
+  var rows  = sheet.getDataRange().getValues();
+  var cambios = [];
+  var omitidas = [];
+
+  for (var i = 1; i < rows.length; i++) {
+    if (!rows[i][0]) continue;
+
+    var etiquetaActual = String(rows[i][3] || '').trim();
+    if (!etiquetaActual || ETIQUETAS_VALIDAS.indexOf(etiquetaActual) !== -1) continue;
+
+    var puntaje = Number(rows[i][2]);
+    if (isNaN(puntaje)) {
+      omitidas.push({ fila: i + 1, fecha: rows[i][0], etiqueta: etiquetaActual });
+      continue;
+    }
+
+    var nueva = nivelRiesgoDesdeScore_(puntaje);
+    cambios.push({ fila: i + 1, fecha: rows[i][0], puntaje: puntaje, antes: etiquetaActual, despues: nueva });
+
+    if (!dryRun) {
+      sheet.getRange(i + 1, 4).setValue(nueva);
+    }
+  }
+
+  Logger.log(
+    (dryRun ? 'SIMULACIÓN — nada se guardó todavía. ' : 'APLICADO — hoja actualizada. ') +
+    cambios.length + ' fila(s) ' + (dryRun ? 'cambiarían' : 'actualizadas') + '.'
+  );
+  cambios.forEach(function (c) {
+    Logger.log('Fila ' + c.fila + ' (' + c.fecha + '): "' + c.antes + '" -> "' + c.despues + '" (puntaje ' + c.puntaje + ')');
+  });
+
+  if (omitidas.length) {
+    Logger.log(omitidas.length + ' fila(s) con etiqueta desconocida pero SIN puntaje numérico válido — no se pudieron recalcular, requieren revisión manual:');
+    omitidas.forEach(function (o) {
+      Logger.log('Fila ' + o.fila + ' (' + o.fecha + '): etiqueta "' + o.etiqueta + '", puntaje ilegible');
+    });
+  }
+
+  return (dryRun ? '[DRY RUN] ' : '[APLICADO] ') + cambios.length + ' fila(s), ' + omitidas.length + ' omitida(s) por revisar. Ver Registros de ejecución para el detalle.';
+}

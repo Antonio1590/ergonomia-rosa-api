@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/useAuth";
 import { detectPose } from "../ai/mediapipe/PoseService";
-import { calculateBodyAngles } from "../ai/mediapipe/AngleCalculator";
+import { calculateBodyAngles, POSE_LANDMARKS } from "../ai/mediapipe/AngleCalculator";
 import { calculateRosaEngine } from "../components/ai/rosa/RosaEngine";
 import type { RosaCalculationResult, RosaAssessment } from "../components/ai/rosa/RosaAssessment";
 import { detectObjects } from "../ai/yolo/YoloService";
@@ -16,6 +16,7 @@ import { SeatedPostureArt } from "../components/illustrations/ErgonomicArt";
 import type { ZoneStatus, PostureZones } from "../components/illustrations/ErgonomicArt";
 import GuidePhoto from "../components/GuidePhoto";
 import { LoadingSpinner } from "../components/common/LoadingSpinner";
+import { useDraft } from "../hooks/useDraft";
 
 /* ─── Tipos ─── */
 type Phase = "guide" | "upload" | "analyzing" | "results";
@@ -40,7 +41,50 @@ interface PhotoAnalysis {
   detections: Detection[];
   landmarks: PosePoint[];
   metrics: WorkstationMetrics;
+  quality: PhotoQuality;
   driveUrl?: string;
+}
+
+interface PhotoQuality {
+  cuerpoCompleto: boolean;
+  buenaVisibilidad: boolean;
+  avisos: string[];
+}
+
+/* ─── Calidad de la foto, a partir de la confianza de MediaPipe ───
+   No hay un modelo de IA de por medio que "opine" sobre el encuadre
+   (a diferencia de Apps Script, que usa Gemini) — esto son proxies
+   medibles directamente de la pose detectada: qué tan visibles están
+   las piernas (necesarias para medir la silla) y qué tan confiable es
+   la detección en general. No se intenta adivinar si la foto está de
+   perfil: sin más que estos landmarks, esa señal no es confiable. */
+const VISIBILITY_OK = 0.5;
+
+function assessPhotoQuality(landmarks: PosePoint[]): PhotoQuality {
+  const vis = (idx: number) => landmarks[idx]?.visibility ?? 0;
+
+  const kneeVis  = Math.max(vis(POSE_LANDMARKS.LEFT_KNEE),  vis(POSE_LANDMARKS.RIGHT_KNEE));
+  const ankleVis = Math.max(vis(POSE_LANDMARKS.LEFT_ANKLE), vis(POSE_LANDMARKS.RIGHT_ANKLE));
+  const cuerpoCompleto = kneeVis >= VISIBILITY_OK && ankleVis >= VISIBILITY_OK;
+
+  const values = landmarks.map((p) => p.visibility ?? 0);
+  const avgVisibility = values.length ? values.reduce((s, v) => s + v, 0) / values.length : 0;
+  const buenaVisibilidad = avgVisibility >= VISIBILITY_OK;
+
+  const avisos: string[] = [];
+  if (!cuerpoCompleto) {
+    avisos.push("No se ven bien tus piernas en la foto — la altura de la silla y las rodillas podrían no ser precisas. Repite la foto de cuerpo completo si puedes.");
+  }
+  if (!buenaVisibilidad) {
+    avisos.push("La postura no se distingue con claridad (foco, luz o encuadre). Considera repetir la foto con mejor iluminación para un análisis más confiable.");
+  }
+
+  return { cuerpoCompleto, buenaVisibilidad, avisos };
+}
+
+interface DraftPayload {
+  combined: CombinedResult;
+  email: string;
 }
 
 interface CombinedResult {
@@ -463,6 +507,7 @@ function ColorLegend() {
 export default function AutoEvaluationPage() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const draft = useDraft<DraftPayload>();
   const [phase, setPhase]       = useState<Phase>("guide");
   const [analysisStep, setStep] = useState(0);
   const [analyses, setAnalyses] = useState<PhotoAnalysis[]>([]);
@@ -522,6 +567,7 @@ export default function AutoEvaluationPage() {
       if (!poseResult?.landmarks?.length) {
         throw new Error("No se detectó ninguna persona en la fotografía. Asegúrate de que el cuerpo sea visible de lado y con buena iluminación.");
       }
+      const quality = assessPhotoQuality(poseResult.landmarks);
 
       /* 2 · Ángulos */
       setStep(1);
@@ -543,7 +589,7 @@ export default function AutoEvaluationPage() {
       /* 4 · Resultado */
       setStep(3);
       const newAnalysis: PhotoAnalysis = {
-        previewUrl, angles, detections,
+        previewUrl, angles, detections, quality,
         landmarks: poseResult.landmarks, metrics,
       };
       const newList = [...analysesRef.current, newAnalysis];
@@ -555,6 +601,11 @@ export default function AutoEvaluationPage() {
       setSaved(false);
       setSaveErr(null);
       setPhase("results");
+
+      // Si cierra la pestaña antes de guardar, al volver puede retomar el
+      // resultado ya calculado sin repetir la foto (aunque sí perdería la
+      // vista de la foto anotada, que no sobrevive un recargo de página).
+      if (user) draft.saveDraft({ combined: newCombined, email: user.email });
 
       saveCalibrationEntry(newCombined.avgAngles, newCombined.rosaResult.scores.final);
 
@@ -599,7 +650,7 @@ export default function AutoEvaluationPage() {
       setError(err instanceof Error ? err.message : "Error durante el análisis.");
       setPhase("upload");
     }
-  }, [user]);
+  }, [user, draft]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -613,6 +664,17 @@ export default function AutoEvaluationPage() {
     e.target.value = "";               // permite volver a elegir el mismo archivo
     if (file) void runAnalysis(file);
   }, [runAnalysis]);
+
+  const restoreDraft = () => {
+    const stored = draft.loadDraft();
+    if (!stored || stored.data.email !== user?.email) return;
+    setAnalyses([]);
+    setActivePhoto(0);
+    setCombined(stored.data.combined);
+    setSaved(false);
+    setSaveErr(null);
+    setPhase("results");
+  };
 
   const resetSession = () => {
     analyses.forEach((a) => URL.revokeObjectURL(a.previewUrl));
@@ -657,6 +719,7 @@ export default function AutoEvaluationPage() {
         wrist: 0,
       });
       setSaved(true);
+      draft.discardDraft();
     } catch (err) {
       setSaveErr(err instanceof Error ? err.message : "No se pudo guardar la evaluación.");
     } finally {
@@ -927,6 +990,23 @@ export default function AutoEvaluationPage() {
             </div>
           </div>
 
+          {/* Calidad de la foto activa — solo si hay algo que avisar */}
+          {photo && photo.quality.avisos.length > 0 && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 mb-5">
+              <div className="flex items-start gap-3">
+                <span className="material-symbols-outlined text-amber-500 shrink-0">visibility_off</span>
+                <div>
+                  <p className="text-sm font-bold text-amber-800 mb-1">Esta foto puede afectar la precisión</p>
+                  <ul className="space-y-1">
+                    {photo.quality.avisos.map((a) => (
+                      <li key={a} className="text-xs text-amber-700">{a}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Foto analizada + diagrama corporal, en bloque uno al lado del otro
               en pantallas grandes — evita el desplazamiento largo en vertical. */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
@@ -1124,12 +1204,36 @@ export default function AutoEvaluationPage() {
   }
 
   /* ─────────────────── FASE: UPLOAD (y respaldo) ─────────────────── */
+  const pendingDraft = analyses.length === 0 && draft.hasDraft ? draft.loadDraft() : null;
+  const ownDraft = pendingDraft && pendingDraft.data.email === user?.email ? pendingDraft : null;
+
   return (
     <div className="min-h-screen bg-[#F0F7F2] flex flex-col">
       {navBar}
       {fileInputs}
       <div className="flex-1 flex items-center justify-center pt-24 pb-12 px-4">
         <div className="w-full max-w-xl">
+
+          {ownDraft && (
+            <div className="mb-6 rounded-2xl border border-[#006D32] bg-green-50 p-4 flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <p className="font-semibold text-[#005224]">Tienes una evaluación sin guardar</p>
+                <p className="text-sm text-gray-600">
+                  Puntaje {ownDraft.data.combined.rosaResult.scores.final} · Riesgo {ownDraft.data.combined.rosaResult.action.risk} · {new Date(ownDraft.savedAt).toLocaleString("es-CO")}
+                </p>
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <button onClick={() => draft.discardDraft()}
+                  className="rounded-xl border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 transition">
+                  Descartar
+                </button>
+                <button onClick={restoreDraft}
+                  className="rounded-xl bg-[#006D32] px-3 py-1.5 text-sm font-semibold text-white hover:bg-[#005224] transition">
+                  Ver y guardar
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="text-center mb-8">
             <h2 className="text-3xl font-black text-[#0b1c30]">

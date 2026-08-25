@@ -1,44 +1,33 @@
-import { useCallback, useEffect, useState } from "react";
-import type { RosaCalculationResult } from "../components/ai/rosa/RosaAssessment";
-import type { Detection } from "../ai/yolo/YoloTypes";
+import { useCallback, useMemo, useState } from "react";
 
 const DRAFT_KEY = "rosa_draft";
 
-interface DraftData {
-  step: number;
-  rosaResult: RosaCalculationResult | null;
-  detections: Detection[];
+interface StoredDraft<T> {
+  data: T;
   savedAt: string;
 }
 
-export function useDraft() {
-  const [hasDraft, setHasDraft] = useState(false);
-  const [draftDate, setDraftDate] = useState<string | null>(null);
-
-  useEffect(() => {
+// Hook genérico: la página que lo usa decide qué forma tiene el borrador
+// (evita que este archivo dependa de tipos definidos en AutoEvaluationPage.tsx).
+export function useDraft<T>() {
+  const [hasDraft, setHasDraft] = useState(() => localStorage.getItem(DRAFT_KEY) !== null);
+  const [draftDate, setDraftDate] = useState<string | null>(() => {
     const raw = localStorage.getItem(DRAFT_KEY);
-    if (raw) {
-      try {
-        const draft: DraftData = JSON.parse(raw);
-        setHasDraft(true);
-        setDraftDate(draft.savedAt);
-      } catch {
-        localStorage.removeItem(DRAFT_KEY);
-      }
-    }
-  }, []);
+    if (!raw) return null;
+    try { return (JSON.parse(raw) as StoredDraft<T>).savedAt; } catch { return null; }
+  });
 
-  const saveDraft = useCallback((data: Omit<DraftData, "savedAt">) => {
-    const draft: DraftData = { ...data, savedAt: new Date().toISOString() };
+  const saveDraft = useCallback((data: T) => {
+    const draft: StoredDraft<T> = { data, savedAt: new Date().toISOString() };
     localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
     setHasDraft(true);
     setDraftDate(draft.savedAt);
   }, []);
 
-  const loadDraft = useCallback((): DraftData | null => {
+  const loadDraft = useCallback((): StoredDraft<T> | null => {
     const raw = localStorage.getItem(DRAFT_KEY);
     if (!raw) return null;
-    try { return JSON.parse(raw); } catch { return null; }
+    try { return JSON.parse(raw) as StoredDraft<T>; } catch { return null; }
   }, []);
 
   const discardDraft = useCallback(() => {
@@ -47,5 +36,10 @@ export function useDraft() {
     setDraftDate(null);
   }, []);
 
-  return { hasDraft, draftDate, saveDraft, loadDraft, discardDraft };
+  // Objeto estable entre renders: si no, cualquier useCallback/useEffect
+  // consumidor que dependa de "draft" completo se recrearía en cada render.
+  return useMemo(
+    () => ({ hasDraft, draftDate, saveDraft, loadDraft, discardDraft }),
+    [hasDraft, draftDate, saveDraft, loadDraft, discardDraft]
+  );
 }
