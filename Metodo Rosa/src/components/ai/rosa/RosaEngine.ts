@@ -9,52 +9,64 @@ import type {
 /* =========================================================
    TABLA A
    Silla
+
+   Alineada el 2026-08-24 con AppsScript/JS_Rosa.html (T_SILLA), fuente
+   validada contra la hoja de trabajo oficial del método ROSA (Sonne,
+   Villalta & Andrews, 2012). Antes esta tabla no coincidía con Apps
+   Script en un número significativo de celdas — ver docs/CHANGELOG.md.
 ========================================================= */
 
 const TABLE_A: number[][] = [
   // Reposabrazos + respaldo: 2  3  4  5  6  7  8  9
-  [2, 2, 2, 3, 4, 5, 6, 7, 8], // Altura + profundidad = 2
-  [2, 2, 3, 4, 5, 6, 7, 8, 9], // 3
-  [3, 3, 3, 4, 5, 6, 7, 8, 9], // 4
-  [4, 4, 4, 4, 5, 6, 7, 8, 9], // 5
-  [5, 5, 5, 5, 6, 7, 8, 9, 9], // 6
-  [6, 6, 6, 7, 7, 8, 8, 9, 9], // 7
-  [7, 7, 7, 8, 8, 9, 9, 9, 9], // 8
+  [1, 2, 3, 4, 5, 6, 7, 8], // Altura + profundidad = 2
+  [2, 2, 3, 4, 5, 6, 7, 8], // 3
+  [3, 3, 3, 4, 5, 6, 7, 8], // 4
+  [4, 4, 4, 4, 5, 6, 7, 8], // 5
+  [5, 5, 5, 5, 5, 6, 7, 8], // 6
+  [6, 6, 6, 6, 6, 6, 7, 8], // 7
+  [7, 7, 7, 7, 7, 7, 7, 8], // 8
 ];
 
 
 /* =========================================================
    TABLA B
    Pantalla + teléfono
+
+   Alineada el 2026-08-24 con AppsScript/JS_Rosa.html (T_MONITOR_TEL).
 ========================================================= */
 
 const TABLE_B: number[][] = [
   // Pantalla: 0 1 2 3 4 5 6 7
   [1, 1, 1, 2, 3, 4, 5, 6], // Teléfono 0
-  [1, 1, 2, 2, 3, 4, 5, 6], // 1
-  [1, 2, 2, 3, 3, 4, 6, 7], // 2
-  [2, 2, 3, 3, 4, 5, 6, 8], // 3
-  [3, 3, 4, 4, 5, 6, 7, 8], // 4
-  [4, 4, 5, 5, 6, 7, 8, 9], // 5
-  [5, 5, 6, 7, 8, 8, 9, 9], // 6
+  [1, 1, 2, 3, 4, 5, 6, 7], // 1
+  [1, 2, 2, 3, 4, 5, 6, 7], // 2
+  [2, 3, 3, 3, 4, 5, 6, 7], // 3
+  [3, 4, 4, 4, 5, 6, 7, 8], // 4
+  [4, 5, 5, 5, 6, 7, 8, 9], // 5
+  [5, 6, 6, 6, 7, 8, 9, 9], // 6
 ];
 
 
 /* =========================================================
    TABLA C
    Teclado + mouse
+
+   Alineada el 2026-08-24 con AppsScript/JS_Rosa.html (T_MOUSE_TECLADO,
+   transpuesta: Apps Script indexa [teclado][mouse], aquí se indexa
+   [mouse][teclado] porque calculateTableC llama a tableLookup con
+   fila=mouse, columna=teclado).
 ========================================================= */
 
 const TABLE_C: number[][] = [
   // Teclado: 0 1 2 3 4 5 6 7
   [1, 1, 1, 2, 3, 4, 5, 6], // Mouse 0
   [1, 1, 2, 3, 4, 5, 6, 7], // 1
-  [1, 2, 2, 3, 4, 6, 6, 7], // 2
-  [2, 3, 3, 3, 5, 6, 7, 8], // 3
-  [3, 4, 4, 5, 5, 6, 7, 8], // 4
-  [4, 5, 5, 6, 6, 7, 8, 9], // 5
-  [5, 6, 6, 7, 7, 8, 8, 9], // 6
-  [6, 7, 7, 8, 8, 9, 9, 9], // 7
+  [1, 2, 2, 3, 4, 5, 6, 7], // 2
+  [2, 3, 3, 3, 4, 5, 6, 7], // 3
+  [3, 4, 4, 4, 5, 6, 7, 8], // 4
+  [4, 5, 5, 5, 6, 7, 8, 9], // 5
+  [5, 6, 6, 6, 7, 8, 9, 9], // 6
+  [6, 7, 7, 7, 8, 9, 9, 9], // 7
 ];
 
 
@@ -225,7 +237,7 @@ function calculateChair(
       2,
       8,
       2,
-      10
+      9
     );
 
   return addTime(
@@ -494,52 +506,45 @@ function calculateAction(
   score: number
 ): RosaActionLevel {
 
-  if (score === 1) {
+  // Cortes idénticos a Apps Script (AppsScript/JS_Rosa.html, nivelRiesgo):
+  // <=2 Bajo, <=4 Medio, <=7 Alto, >7 Muy Alto. El umbral de intervención
+  // del método ROSA oficial sigue siendo 5 en ambos (requiereIntervencion).
+  if (score <= 2) {
     return {
       score,
-      risk: "Inapreciable",
+      risk: "Bajo",
       level: 0,
       action:
-        "No es necesaria actuación.",
+        "Puesto aceptable. Mantén esta configuración.",
     };
   }
 
   if (score <= 4) {
     return {
       score,
-      risk: "Mejorable",
+      risk: "Medio",
       level: 1,
       action:
-        "Pueden mejorarse algunos elementos del puesto.",
+        "Conviene hacer ajustes preventivos.",
     };
   }
 
-  if (score === 5) {
+  if (score <= 7) {
     return {
       score,
       risk: "Alto",
       level: 2,
       action:
-        "Es necesaria la actuación.",
-    };
-  }
-
-  if (score <= 8) {
-    return {
-      score,
-      risk: "Muy Alto",
-      level: 3,
-      action:
-        "Es necesaria la actuación cuanto antes.",
+        "Requiere intervención ergonómica.",
     };
   }
 
   return {
     score,
-    risk: "Extremo",
-    level: 4,
+    risk: "Muy Alto",
+    level: 3,
     action:
-      "Es necesaria la actuación urgentemente.",
+      "Intervención prioritaria e inmediata.",
   };
 }
 

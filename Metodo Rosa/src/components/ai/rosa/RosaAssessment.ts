@@ -399,12 +399,18 @@ export interface RosaPartialScores {
    NIVEL DE ACTUACIÓN
 ========================================================= */
 
+/**
+ * Escala unificada con Apps Script (docs/DATA_MODEL.md) — antes React
+ * usaba 5 niveles propios (Inapreciable/Mejorable/Alto/Muy Alto/Extremo)
+ * que no coincidían con los 4 de Apps Script. Se estandarizó a la escala
+ * de Apps Script porque el panel de administración (con sus gráficas y
+ * filtros) ya depende de estas 4 etiquetas exactas.
+ */
 export type RosaRisk =
-  | "Inapreciable"
-  | "Mejorable"
+  | "Bajo"
+  | "Medio"
   | "Alto"
-  | "Muy Alto"
-  | "Extremo";
+  | "Muy Alto";
 
 export interface RosaActionLevel {
 
@@ -412,7 +418,7 @@ export interface RosaActionLevel {
 
   risk: RosaRisk;
 
-  level: 0 | 1 | 2 | 3 | 4;
+  level: 0 | 1 | 2 | 3;
 
   action: string;
 }

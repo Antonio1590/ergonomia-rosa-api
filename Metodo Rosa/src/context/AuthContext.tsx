@@ -1,39 +1,25 @@
-import {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-} from "react";
+import { useState } from "react";
 import type { ReactNode } from "react";
 import type { AppUser } from "../services/SheetsService";
 import { loginUser } from "../services/SheetsService";
+import { AuthContext, SESSION_KEY } from "./useAuth";
 
-interface AuthContextType {
-  user: AppUser | null;
-  loading: boolean;
-  login: (email: string, cedula: string) => Promise<void>;
-  logout: () => void;
+function readStoredUser(): AppUser | null {
+  const stored = localStorage.getItem(SESSION_KEY);
+  if (!stored) return null;
+  try {
+    return JSON.parse(stored) as AppUser;
+  } catch {
+    localStorage.removeItem(SESSION_KEY);
+    return null;
+  }
 }
 
-const AuthContext = createContext<AuthContextType | null>(null);
-
-const SESSION_KEY = "rosa_session";
-
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AppUser | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const stored = localStorage.getItem(SESSION_KEY);
-    if (stored) {
-      try {
-        setUser(JSON.parse(stored) as AppUser);
-      } catch {
-        localStorage.removeItem(SESSION_KEY);
-      }
-    }
-    setLoading(false);
-  }, []);
+  // Estado inicial derivado directamente de localStorage (lazy init) en vez
+  // de un useEffect que llame a setState al montar — evita una renderización
+  // en cascada innecesaria.
+  const [user, setUser] = useState<AppUser | null>(readStoredUser);
 
   const login = async (email: string, cedula: string) => {
     const loggedUser = await loginUser(email, cedula);
@@ -47,14 +33,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading: false, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
-}
-
-export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth debe usarse dentro de AuthProvider");
-  return ctx;
 }

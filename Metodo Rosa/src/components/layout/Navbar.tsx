@@ -1,4 +1,4 @@
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/useAuth";
 import { useSidebar } from "../../context/SidebarContext";
 
 export default function Navbar() {

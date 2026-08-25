@@ -1,8 +1,42 @@
 // ============================================================
 // ROSA Expert — Router principal + utilidades compartidas
 // ============================================================
-var SPREADSHEET_ID = "17vDjLtj6PN-MrYwYVP07XwyFEpemWkY-MhxhPdl6PHE";
-var ADMIN_EMAILS   = ["bbocanegrah@gmail.com"];
+//
+// SPREADSHEET_ID y ADMIN_EMAILS se leen de PropertiesService cuando están
+// configurados ahí (Configuración del proyecto → Propiedades de la
+// secuencia de comandos), igual que ya se hace con GEMINI_API_KEY en
+// Gemini.gs. Si no se configuran, se usa el valor por defecto de abajo —
+// así el despliegue actual sigue funcionando sin cambios. Para migrar,
+// ejecuta UNA vez desde el editor: configurarProyecto('TU_SPREADSHEET_ID',
+// ['correo1@segurosbolivar.com','correo2@segurosbolivar.com']).
+var SPREADSHEET_ID_POR_DEFECTO = "17vDjLtj6PN-MrYwYVP07XwyFEpemWkY-MhxhPdl6PHE";
+var ADMIN_EMAILS_POR_DEFECTO   = ["bbocanegrah@gmail.com"];
+
+function getSpreadsheetId() {
+  var props = PropertiesService.getScriptProperties();
+  return props.getProperty('SPREADSHEET_ID') || SPREADSHEET_ID_POR_DEFECTO;
+}
+
+function getAdminEmails() {
+  var props = PropertiesService.getScriptProperties();
+  var raw = props.getProperty('ADMIN_EMAILS');
+  if (!raw) return ADMIN_EMAILS_POR_DEFECTO;
+  return raw.split(',').map(function(e) { return e.trim(); }).filter(Boolean);
+}
+
+/**
+ * Ejecutar UNA vez desde el editor para mover estos valores fuera del
+ * código fuente. admins puede ser un array o un string separado por comas.
+ */
+function configurarProyecto(spreadsheetId, admins) {
+  var props = PropertiesService.getScriptProperties();
+  if (spreadsheetId) props.setProperty('SPREADSHEET_ID', spreadsheetId);
+  if (admins) {
+    var lista = Array.isArray(admins) ? admins.join(',') : admins;
+    props.setProperty('ADMIN_EMAILS', lista);
+  }
+  return 'Configuración guardada';
+}
 
 // Sirve la SPA completa como HTML
 function doGet() {
@@ -56,7 +90,7 @@ function json(data) {
 
 // Obtiene una hoja por nombre; lanza si no existe
 function getSheet(name) {
-  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var ss = SpreadsheetApp.openById(getSpreadsheetId());
   var sh = ss.getSheetByName(name);
   if (!sh) throw new Error("Hoja '" + name + "' no encontrada");
   return sh;

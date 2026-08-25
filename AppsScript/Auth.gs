@@ -26,7 +26,7 @@ function handleLogin(email, cedula) {
       if (rowEstado !== 'activo') {
         return { ok: false, error: 'Usuario inactivo. Contacta al administrador.' };
       }
-      var admins = ADMIN_EMAILS.map(function(e) { return e.toLowerCase(); });
+      var admins = getAdminEmails().map(function(e) { return e.toLowerCase(); });
       var esAdmin = admins.indexOf(rowEmail) !== -1
                  || String(rows[i][3]).toLowerCase() === 'admin';
       return {

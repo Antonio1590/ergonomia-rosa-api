@@ -185,6 +185,46 @@ function calculateKneeAngle(
   );
 }
 
+function calculateShoulderAngle(
+  landmarks: PosePoint[],
+  hipIndex: number,
+  shoulderIndex: number,
+  elbowIndex: number
+): number {
+
+  const hip =
+    getLandmark(
+      landmarks,
+      hipIndex
+    );
+
+  const shoulder =
+    getLandmark(
+      landmarks,
+      shoulderIndex
+    );
+
+  const elbow =
+    getLandmark(
+      landmarks,
+      elbowIndex
+    );
+
+  if (
+    !hip ||
+    !shoulder ||
+    !elbow
+  ) {
+    return 0;
+  }
+
+  return calculateAngle(
+    hip,
+    shoulder,
+    elbow
+  );
+}
+
 function calculateTrunkAngle(
   landmarks: PosePoint[]
 ): number {
@@ -335,9 +375,21 @@ export function calculateBodyAngles(
         landmarks
       ),
 
-    leftShoulder: 0,
+    leftShoulder:
+      calculateShoulderAngle(
+        landmarks,
+        POSE_LANDMARKS.LEFT_HIP,
+        POSE_LANDMARKS.LEFT_SHOULDER,
+        POSE_LANDMARKS.LEFT_ELBOW
+      ),
 
-    rightShoulder: 0,
+    rightShoulder:
+      calculateShoulderAngle(
+        landmarks,
+        POSE_LANDMARKS.RIGHT_HIP,
+        POSE_LANDMARKS.RIGHT_SHOULDER,
+        POSE_LANDMARKS.RIGHT_ELBOW
+      ),
 
     leftElbow:
       calculateElbowAngle(
@@ -355,6 +407,11 @@ export function calculateBodyAngles(
         POSE_LANDMARKS.RIGHT_WRIST
       ),
 
+    // El modelo de pose (33 puntos) no incluye landmarks de mano: sin un
+    // punto más allá de la muñeca no hay forma de medir flexión/desviación
+    // de muñeca. Requeriría integrar el Hand Landmarker de MediaPipe
+    // aparte. Se deja en 0 a propósito (no se usa en ningún puntaje ROSA
+    // hoy, ver armScoreOf en AutoEvaluationPage.tsx).
     leftWrist: 0,
 
     rightWrist: 0,

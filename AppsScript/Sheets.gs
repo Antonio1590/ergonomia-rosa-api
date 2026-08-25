@@ -2,7 +2,13 @@
 // ROSA Expert — Operaciones CRUD en Google Sheets
 // Hoja "Registros": Fecha|Email|TotalROSA|Riesgo|Postura|
 //                   URLImagen|Detalles|Recomendaciones|
-//                   Neck|Trunk|Legs|Arms|Wrist
+//                   Neck|Trunk|Legs|Arms|Wrist|Nombre|Cedula
+//
+// Nombre y Cedula (columnas N y O) se agregaron después de que se detectó
+// que el cliente ya los enviaba pero el servidor los descartaba en
+// silencio (ver docs/DATA_MODEL.md). Si la hoja real todavía no tiene esas
+// dos columnas de encabezado, agrégalas manualmente en N1="Nombre" y
+// O1="Cedula" — las filas ya guardadas simplemente quedarán vacías ahí.
 // ============================================================
 
 function handleSaveEvaluation(record) {
@@ -25,11 +31,13 @@ function handleSaveEvaluation(record) {
     Array.isArray(record.recomendaciones)
       ? record.recomendaciones.join(' | ')
       : (record.recomendaciones || ''),
-    record.neck  || '',
-    record.trunk || '',
-    record.legs  || '',
-    record.arms  || '',
-    record.wrist || ''
+    record.neck   || '',
+    record.trunk  || '',
+    record.legs   || '',
+    record.arms   || '',
+    record.wrist  || '',
+    record.nombre || '',
+    record.cedula || ''
   ]);
 
   return { ok: true };
@@ -53,7 +61,10 @@ function handleGetEvaluations() {
       recomendaciones: rows[i][7],
       neck:   rows[i][8],  trunk: rows[i][9],
       legs:   rows[i][10], arms:  rows[i][11], wrist: rows[i][12],
-      nombre: rows[i][1] ? rows[i][1].split('@')[0] : ''
+      // Filas guardadas antes de que existieran las columnas N/O no tienen
+      // nombre propio: se aproxima con la parte local del correo.
+      nombre: rows[i][13] || (rows[i][1] ? rows[i][1].split('@')[0] : ''),
+      cedula: rows[i][14] || ''
     });
   }
 

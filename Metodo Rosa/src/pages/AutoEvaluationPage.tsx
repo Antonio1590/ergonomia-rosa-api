@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/useAuth";
 import { detectPose } from "../ai/mediapipe/PoseService";
 import { calculateBodyAngles } from "../ai/mediapipe/AngleCalculator";
 import { calculateRosaEngine } from "../components/ai/rosa/RosaEngine";
@@ -59,11 +59,10 @@ const ANALYZING_STEPS = [
 ];
 
 const RISK_CONFIG: Record<string, { bg: string; text: string; border: string; color: string; icon: string }> = {
-  Inapreciable: { bg: "bg-green-50",  text: "text-green-700",  border: "border-green-200", color: "#16a34a", icon: "check_circle" },
-  Mejorable:    { bg: "bg-yellow-50", text: "text-yellow-700", border: "border-yellow-200", color: "#ca8a04", icon: "info" },
-  Alto:         { bg: "bg-orange-50", text: "text-orange-700", border: "border-orange-200", color: "#ea580c", icon: "warning" },
-  "Muy Alto":   { bg: "bg-red-50",    text: "text-red-700",    border: "border-red-200",   color: "#dc2626", icon: "error" },
-  Extremo:      { bg: "bg-red-100",   text: "text-red-900",    border: "border-red-400",   color: "#991b1b", icon: "dangerous" },
+  Bajo:       { bg: "bg-green-50",  text: "text-green-700",  border: "border-green-200", color: "#059669", icon: "check_circle" },
+  Medio:      { bg: "bg-yellow-50", text: "text-yellow-700", border: "border-yellow-200", color: "#ca8a04", icon: "info" },
+  Alto:       { bg: "bg-red-50",    text: "text-red-700",    border: "border-red-200",   color: "#f43f5e", icon: "warning" },
+  "Muy Alto": { bg: "bg-red-100",   text: "text-red-900",    border: "border-red-400",   color: "#9f1239", icon: "dangerous" },
 };
 
 const EMPTY_ANGLES: BodyAngles = {
@@ -845,7 +844,7 @@ export default function AutoEvaluationPage() {
     const calibStats = getCalibrationStats();
     const { rosaResult, avgAngles, allDetections, metrics } = combined;
     const { action, scores, recommendations } = rosaResult;
-    const cfg = RISK_CONFIG[action.risk] ?? RISK_CONFIG["Mejorable"];
+    const cfg = RISK_CONFIG[action.risk] ?? RISK_CONFIG["Medio"];
     const photo = analyses[Math.min(activePhoto, analyses.length - 1)];
     const clsStatus = statusByClassFrom(metrics);
 

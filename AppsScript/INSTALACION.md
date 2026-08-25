@@ -1,98 +1,109 @@
 # ROSA Expert — Instalación en Apps Script
 
-## Paso 1 · Subir assets a Netlify (modelos de IA)
+Esta guía refleja la arquitectura **actual**: Apps Script analiza la foto
+con **Gemini** en el servidor (no usa YOLO ni MediaPipe del lado Apps
+Script — eso es exclusivo del cliente React). No se necesita ningún
+hosting externo (Netlify u otro) para desplegar Apps Script: los modelos
+YOLO/wasm del proyecto pertenecen únicamente a `Metodo Rosa/` (React) y se
+sirven desde donde se despliegue esa app (ver `README.md` raíz, sección
+"Desplegar en producción").
 
-Apps Script no puede servir archivos binarios grandes, por eso el modelo YOLO
-y las fotos de guía siguen en Netlify. Solo necesitas hacer esto UNA vez.
+## Paso 1 · Crear el proyecto de Apps Script
 
-1. Abre **app.netlify.com** → tu sitio `famous-tartufo-04dba5`
-2. Ve a la pestaña **Deploys**
-3. Arrastra la **carpeta** `Metodo Rosa/dist/` al área "Drag and drop your site folder here"
-   - Arrastra la CARPETA, no un .zip
-   - Esto reemplaza el despliegue roto anterior
+1. Abre [script.google.com](https://script.google.com) → **Nuevo proyecto**.
+2. Borra el contenido por defecto de `Code.gs`.
 
-Los archivos que usa la app desde Netlify:
-- `best.onnx` — modelo YOLO
-- `postura-lateral.jpg` / `puesto-trabajo.jpg` — fotos de guía
-- Archivos `.wasm` y `.mjs` — runtime de IA (si los CDN fallan)
+## Paso 2 · Crear los archivos
 
----
+Para cada archivo `.gs`: clic en **+ Archivo → Script**, nombra el archivo
+exactamente igual (sin la extensión `.gs`), pega el contenido.
+Para cada archivo `.html`: clic en **+ Archivo → HTML**, mismo criterio
+(sin la extensión `.html`).
 
-## Paso 2 · Crear archivos en Apps Script
+**Scripts (.gs) — 6 archivos:**
+- `Code` ← `Code.gs` (router, `doGet`/`doPost`/`rpcHandler`, config de
+  `SPREADSHEET_ID`/`ADMIN_EMAILS`)
+- `Auth` ← `Auth.gs` (login)
+- `Sheets` ← `Sheets.gs` (CRUD de evaluaciones y usuarios)
+- `Drive` ← `Drive.gs` (subida de fotos)
+- `Training` ← `Training.gs` (datos para reentrenamiento de modelos)
+- `Gemini` ← `Gemini.gs` (análisis de foto con IA — **no lo omitas**, sin
+  este archivo `analyzePhoto` falla)
 
-1. Abre tu proyecto Apps Script:
-   `https://script.google.com`
+**HTML — 21 archivos:**
+- `Index` (shell de la SPA)
+- `CSS_Base`, `CSS_Components`
+- `Page_Login`, `Page_Guide`, `Page_Questions`, `Page_Results`,
+  `Page_History`, `Page_Dashboard`
+- `JS_State`, `JS_Api`, `JS_Rosa`, `JS_Analysis`, `JS_Quality`,
+  `JS_Questions`, `JS_Guide`, `JS_Charts`, `JS_History`, `JS_Dashboard`,
+  `JS_Init`
+- `Photos` (fotos de guía embebidas en base64)
 
-2. Elimina o reemplaza el contenido del `Code.gs` existente con el nuevo.
+Confirma la lista completa contra lo que exista realmente en la carpeta
+`AppsScript/` en el momento de instalar — este documento puede quedar
+desactualizado si se agregan o renombran archivos después (ya ocurrió una
+vez: esta misma guía listaba `JS_Yolo.html`/`JS_Pose.html`, de una versión
+anterior de la arquitectura que ya no existe).
 
-3. Para cada archivo `.gs` adicional (Auth, Sheets, Drive, Training):
-   - Clic en **+ Archivo → Script**
-   - Nombre el archivo exactamente como se indica (sin extensión .gs)
-   - Pega el contenido
+## Paso 3 · Configurar la hoja de cálculo
 
-4. Para cada archivo `.html` (Index, CSS_*, JS_*, Page_*):
-   - Clic en **+ Archivo → HTML**
-   - Nombre el archivo exactamente como se indica (sin extensión .html)
-   - Pega el contenido
+Ver `README.md` (raíz), sección "Configurar Google Sheets", para los
+nombres de hoja y columnas reales (`Metrica` y `Registros` — **no**
+`Usuarios`/`Evaluaciones`).
 
-### Lista completa de archivos a crear:
+## Paso 4 · Configurar el proyecto (Spreadsheet ID, administradores, Gemini)
 
-**Scripts (.gs):**
-- `Code` ← contiene Code.gs
-- `Auth` ← contiene Auth.gs
-- `Sheets` ← contiene Sheets.gs
-- `Drive` ← contiene Drive.gs
-- `Training` ← contiene Training.gs
+Todo se guarda en **Propiedades de la secuencia de comandos**
+(`PropertiesService`), nunca en el código fuente:
 
-**HTML (.html):**
-- `Index`
-- `CSS_Base`
-- `CSS_Components`
-- `Page_Login`
-- `Page_Guide`
-- `Page_Results`
-- `Page_Dashboard`
-- `JS_State`
-- `JS_Api`
-- `JS_Yolo`
-- `JS_Pose`
-- `JS_Rosa`
-- `JS_Analysis`
-- `JS_Guide`
-- `JS_Dashboard`
-- `JS_Init`
+1. En el editor, selecciona la función `configurarProyecto` (en `Code.gs`)
+   y ejecútala una vez pasando tu spreadsheet ID y la lista de correos
+   admin, por ejemplo desde la consola de ejecución:
+   ```javascript
+   configurarProyecto(
+     "TU_SPREADSHEET_ID",
+     ["tu.correo@segurosbolivar.com", "otro.admin@segurosbolivar.com"]
+   );
+   ```
+   Si no ejecutas este paso, el proyecto sigue funcionando con los valores
+   por defecto hardcodeados en `Code.gs` (compatibilidad con despliegues
+   existentes) — pero se recomienda migrar.
+2. Selecciona la función `guardarClaveGemini` (en `Gemini.gs`) y ejecútala
+   una vez con tu clave de la API de Gemini:
+   ```javascript
+   guardarClaveGemini("TU_CLAVE_DE_GEMINI");
+   ```
+3. Autoriza los permisos que se pidan la primera vez que ejecutes cualquiera
+   de estas dos funciones.
 
----
+## Paso 5 · Autorizar Drive
 
-## Paso 3 · Autorizar Drive (solo si no lo hiciste antes)
+1. En el editor, selecciona la función `autorizarDrive` (en `Drive.gs`).
+2. Clic en **Ejecutar** y autoriza los permisos.
 
-1. En el editor, selecciona la función `autorizarDrive`
-2. Clic en **Ejecutar**
-3. Autoriza los permisos
+## Paso 6 · Desplegar
 
----
+1. **Implementar → Nueva implementación**.
+2. Configurar:
+   - **Tipo:** Aplicación web
+   - **Ejecutar como:** Yo (tu cuenta Google)
+   - **Quién accede:** Cualquier usuario (Anyone)
+3. Clic en **Implementar**, autoriza si se solicita.
+4. Copia la **URL de la aplicación web** (`.../exec`) — esa es la URL que
+   va en `VITE_APPS_SCRIPT_URL` para el cliente React (ver `Metodo
+   Rosa/.env.example`).
 
-## Paso 4 · Desplegar
+Para desplegar cambios posteriores sin cambiar la URL:
+**Implementar → Administrar implementaciones → editar (lápiz) → Versión:
+Nueva versión → Implementar.** Nunca uses "Nueva implementación" para una
+actualización — eso genera una URL distinta y deja la anterior fuera de
+servicio.
 
-1. Clic en **Implementar → Administrar implementaciones**
-2. Clic en el ícono de **lápiz (editar)** de la implementación existente
-3. En "Versión" selecciona **Nueva versión**
-4. Clic en **Implementar**
-5. Copia la URL — esa es la URL de producción para compartir con los usuarios
+## Verificar que funciona
 
-> ⚠️ Nunca uses "Nueva implementación" — eso genera una URL diferente.
-> Siempre edita la implementación existente con "Nueva versión".
-
----
-
-## Configuración en `JS_Yolo.html`
-
-Si en algún momento cambias el sitio de Netlify, actualiza esta línea:
-```javascript
-var STATIC_BASE = 'https://famous-tartufo-04dba5.netlify.app';
-```
-
-Y en `JS_Guide.html`:
-```javascript
-var STATIC_BASE = 'https://famous-tartufo-04dba5.netlify.app';
-```
+Abre la URL de despliegue directamente en el navegador — debe cargar la
+SPA completa (pantalla de login). Para probar el endpoint REST que usa
+React, un `POST` a esa misma URL con
+`{"action":"login","email":"...","cedula":"..."}` debe responder
+`{"ok":true,"data":{...}}` o `{"ok":false,"error":"..."}`.

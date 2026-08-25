@@ -1,14 +1,13 @@
 import { useState } from "react";
 import { useRosaResult } from "../../context/RosaResultContext";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/useAuth";
 import { saveEvaluation } from "../../services/SheetsService";
 
 const RISK_COLORS: Record<string, string> = {
-  Inapreciable: "text-green-600 bg-green-50 border-green-200",
-  Mejorable:    "text-yellow-600 bg-yellow-50 border-yellow-200",
-  Alto:         "text-orange-600 bg-orange-50 border-orange-200",
-  "Muy Alto":   "text-red-600 bg-red-50 border-red-200",
-  Extremo:      "text-red-800 bg-red-100 border-red-400",
+  Bajo:       "text-green-600 bg-green-50 border-green-200",
+  Medio:      "text-yellow-600 bg-yellow-50 border-yellow-200",
+  Alto:       "text-red-600 bg-red-50 border-red-200",
+  "Muy Alto": "text-red-800 bg-red-100 border-red-400",
 };
 
 export default function Step4Result() {

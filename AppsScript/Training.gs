@@ -7,7 +7,7 @@
 function handleSaveTraining(record) {
   if (!record) return { ok: false, error: 'Sin datos de entrenamiento' };
 
-  var ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var ss    = SpreadsheetApp.openById(getSpreadsheetId());
   var sheet = ss.getSheetByName('Entrenamiento');
 
   if (!sheet) {
@@ -18,7 +18,7 @@ function handleSaveTraining(record) {
       'CodoIzq_deg', 'CodoDer_deg', 'HombroIzq_deg', 'HombroDer_deg',
       'PuntajeFinal', 'NivelRiesgo', 'Detecciones_JSON', 'NumFotos',
       'MonitorScore', 'EscritorioAlto', 'TelefonoEntreHombro',
-      'RevisadoPorExperto', 'Correcciones'
+      'RevisadoPorExperto', 'Correcciones', 'Respuestas_JSON'
     ];
     sheet.appendRow(headers);
     sheet.getRange(1, 1, 1, headers.length)
@@ -47,7 +47,10 @@ function handleSaveTraining(record) {
     record.deskHighStatus   || 'unknown',
     record.phoneNearNeck    ? 'SI' : 'NO',
     '',  // RevisadoPorExperto — lo completa el experto
-    ''   // Correcciones — lo completa el experto
+    '',  // Correcciones — lo completa el experto
+    // Antes se perdía en silencio: JS_Analysis.html (Apps Script) ya
+    // enviaba record.respuestas pero no había columna para guardarlo.
+    record.respuestas || '{}'
   ]);
 
   return { ok: true };

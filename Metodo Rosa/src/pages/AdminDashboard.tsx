@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { getAllEvaluations, getAllUsers } from "../services/SheetsService";
 import type { EvaluationRecord, AppUser } from "../services/SheetsService";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/useAuth";
 
 const HERO_IMG =
   "https://lh3.googleusercontent.com/aida-public/AB6AXuByJtTqKg9SFMqcyHasdmfw6doLesbtyANLvXfD648XyYw57bJEwRwzxSt508qmP0BXNb0MN4iUgglERzio9cRDlGFw8odpA0ZBE9JMD5oUskBQuzdNK0rsk7F9LM9z1dZi-dpbX-TN4QLGhJcLYNSf24r89ScOg4c7xfSl3NjJfoj9WDoxuEyrUuQYWQWQQJhmPHFDol_2Y3U9Uc3wipSI29MLw5RjhlQLWT1tU5i7sNYMjNWVPuPttT84LnRweAcz427dbypJO2Y";
@@ -9,11 +9,10 @@ const HERO_IMG =
 type Tab = "evaluaciones" | "usuarios";
 
 const RISK_CONFIG: Record<string, { badge: string; dot: string }> = {
-  Inapreciable: { badge: "bg-green-50 text-green-700 border border-green-200",   dot: "bg-green-500" },
-  Mejorable:    { badge: "bg-yellow-50 text-yellow-700 border border-yellow-200", dot: "bg-yellow-500" },
-  Alto:         { badge: "bg-orange-50 text-orange-700 border border-orange-200", dot: "bg-orange-500" },
-  "Muy Alto":   { badge: "bg-red-50 text-red-700 border border-red-200",          dot: "bg-red-500" },
-  Extremo:      { badge: "bg-red-100 text-red-900 border border-red-400 font-bold", dot: "bg-red-700" },
+  Bajo:       { badge: "bg-green-50 text-green-700 border border-green-200",   dot: "bg-green-500" },
+  Medio:      { badge: "bg-yellow-50 text-yellow-700 border border-yellow-200", dot: "bg-yellow-500" },
+  Alto:       { badge: "bg-red-50 text-red-700 border border-red-200",          dot: "bg-red-500" },
+  "Muy Alto": { badge: "bg-red-100 text-red-900 border border-red-400 font-bold", dot: "bg-red-700" },
 };
 
 function scoreColor(s: number) {

@@ -2,7 +2,8 @@
 // rutas del servidor, por lo que el enrutado debe vivir en el fragmento (#).
 import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
 
-import { useAuth } from "./context/AuthContext";
+import { useAuth } from "./context/useAuth";
+import { ErrorBoundary } from "./components/common/ErrorBoundary";
 import Login from "./pages/Login";
 import AdminDashboard from "./pages/AdminDashboard";
 import AutoEvaluationPage from "./pages/AutoEvaluationPage";
@@ -38,38 +39,43 @@ export default function App() {
 
   return (
     <HashRouter>
-      <Routes>
+      <ErrorBoundary
+        message="Ocurrió un error inesperado en ROSA Expert."
+        onReset={() => window.location.reload()}
+      >
+        <Routes>
 
-        <Route
-          path="/login"
-          element={
-            user
-              ? <Navigate to={user.rol === "admin" ? "/admin" : "/"} replace />
-              : <Login />
-          }
-        />
+          <Route
+            path="/login"
+            element={
+              user
+                ? <Navigate to={user.rol === "admin" ? "/admin" : "/"} replace />
+                : <Login />
+            }
+          />
 
-        <Route
-          path="/admin"
-          element={
-            <ProtectedRoute>
-              {user?.rol === "admin"
-                ? <AdminDashboard />
-                : <Navigate to="/" replace />}
-            </ProtectedRoute>
-          }
-        />
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute>
+                {user?.rol === "admin"
+                  ? <AdminDashboard />
+                  : <Navigate to="/" replace />}
+              </ProtectedRoute>
+            }
+          />
 
-        <Route
-          path="/*"
-          element={
-            <ProtectedRoute>
-              <AutoEvaluationPage />
-            </ProtectedRoute>
-          }
-        />
+          <Route
+            path="/*"
+            element={
+              <ProtectedRoute>
+                <AutoEvaluationPage />
+              </ProtectedRoute>
+            }
+          />
 
-      </Routes>
+        </Routes>
+      </ErrorBoundary>
     </HashRouter>
   );
 }

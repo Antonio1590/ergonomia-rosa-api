@@ -17,7 +17,7 @@ Aplicación web desarrollada para **Seguros Bolívar** que permite evaluar la er
 ```bash
 cd "Metodo Rosa"
 npm install
-node scripts/copy-wasm.js
+npm run copy-wasm
 cp .env.example .env
 # Editar .env con la URL del Apps Script (ver sección siguiente)
 npm run dev
@@ -30,19 +30,25 @@ La app estará disponible en `http://localhost:5173`.
 ## Configurar Google Sheets
 
 1. Ir a [drive.google.com](https://drive.google.com) y crear una nueva **Hoja de cálculo**.
-2. Renombrar la hoja por defecto (pestaña inferior) a **`Usuarios`**.
-3. Crear una segunda hoja y nombrarla **`Evaluaciones`**.
-4. En la hoja **`Usuarios`**, escribir en la fila 1 los siguientes encabezados (una columna por celda):
+2. Renombrar la hoja por defecto (pestaña inferior) a **`Metrica`**.
+3. Crear una segunda hoja y nombrarla **`Registros`**.
+4. En la hoja **`Metrica`**, escribir en la fila 1 los siguientes encabezados (una columna por celda):
 
-   | A | B | C | D | E |
-   |---|---|---|---|---|
-   | cedula | email | nombre | rol | fechaRegistro |
+   | A | B | C | D | E | F |
+   |---|---|---|---|---|---|
+   | Cedula | Email | Nombre | Rol | Estado | FechaRegistro |
 
-5. En la hoja **`Evaluaciones`**, escribir en la fila 1:
+   `Rol` es `user` o `admin`. `Estado` es `activo` o `inactivo` (vacío se
+   trata como activo).
 
-   | A | B | C | D | E | F | G | H | I | J | K |
-   |---|---|---|---|---|---|---|---|---|---|---|
-   | cedula | nombre | email | fecha | puntajeFinal | nivelRiesgo | puntajeSilla | puntajePantalla | puntajeTeclado | objetosDetectados | recomendaciones |
+5. En la hoja **`Registros`**, escribir en la fila 1:
+
+   | A | B | C | D | E | F | G | H | I | J | K | L | M | N | O |
+   |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+   | Fecha | Email | TotalROSA | Riesgo | Postura | URLImagen | Detalles | Recomendaciones | Neck | Trunk | Legs | Arms | Wrist | Nombre | Cedula |
+
+   Una tercera hoja, **`Entrenamiento`**, se crea automáticamente la primera
+   vez que se guarda una evaluación — no hace falta crearla a mano.
 
 6. Copiar el **ID del spreadsheet** desde la URL del navegador: es la cadena larga que aparece entre `/d/` y `/edit`.
 
@@ -53,16 +59,22 @@ La app estará disponible en `http://localhost:5173`.
 ## Desplegar Apps Script
 
 1. Ir a [script.google.com](https://script.google.com) y hacer clic en **Nuevo proyecto**.
-2. Borrar el contenido por defecto y pegar el contenido completo de `AppsScript/Code.gs`.
-3. Reemplazar el valor de `SPREADSHEET_ID` con el ID copiado en el paso anterior:
+2. Crear todos los archivos `.gs`/`.html` de `AppsScript/` (ver
+   `AppsScript/INSTALACION.md` para la lista completa y el detalle paso a
+   paso — no te saltes `Gemini.gs`, sin él el análisis de foto falla).
+3. Guardar el proyecto con **Ctrl + S**.
+4. Ejecutar una vez desde el editor, para dejar `SPREADSHEET_ID` y
+   `ADMIN_EMAILS` fuera del código fuente (en `PropertiesService`):
    ```javascript
-   var SPREADSHEET_ID = "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms";
+   configurarProyecto(
+     "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms",
+     ["tu.correo@segurosbolivar.com"]
+   );
    ```
-4. Agregar tu correo (y el de otros admins) en `ADMIN_EMAILS`:
-   ```javascript
-   var ADMIN_EMAILS = ["tu.correo@segurosbolivar.com"];
-   ```
-5. Guardar el proyecto con **Ctrl + S**.
+   (Si se omite este paso, el proyecto sigue funcionando con los valores
+   por defecto ya presentes en `Code.gs`.)
+5. Ejecutar `guardarClaveGemini("TU_CLAVE_DE_GEMINI")` una vez, y
+   `autorizarDrive` una vez (ver `AppsScript/INSTALACION.md`).
 6. Ir a **Implementar → Nueva implementación**.
 7. Configurar:
    - **Tipo:** Aplicación web
@@ -115,34 +127,49 @@ Si aparece un error de permisos, volver a **Implementar → Administrar implemen
 
 ```
 FOTOS METODO ROSA/FRONT/
-├── AppsScript/
-│   └── Code.gs                  # Backend Google Apps Script (login, evaluaciones, usuarios)
-├── Metodo Rosa/
+├── AppsScript/                  # SPA + backend Google Apps Script (login, evaluaciones,
+│                                 #   usuarios, análisis de foto con Gemini)
+├── Metodo Rosa/                 # Cliente React — la app real que usan los empleados
 │   ├── public/                  # Assets estáticos y modelos WASM/ONNX
 │   ├── scripts/
-│   │   └── copy-wasm.js         # Script de setup: copia archivos WASM al directorio public
+│   │   └── copy-wasm.cjs        # Script de setup: copia archivos WASM al directorio public
 │   ├── src/
 │   │   ├── ai/
-│   │   │   ├── mediapipe/       # Servicio de detección de pose con MediaPipe
-│   │   │   └── yolo/            # Servicio de detección de objetos con YOLO (ONNX)
-│   │   ├── components/
-│   │   │   ├── ai/              # Componentes de análisis IA: postura, reconocimiento, ROSA
-│   │   │   │   ├── mediapipe/   # Overlay de esqueleto y cálculo de ángulos
-│   │   │   │   ├── rosa/        # Motor de cálculo ROSA (silla, pantalla, teclado)
-│   │   │   │   └── yolo/        # Visualización de resultados YOLO
-│   │   │   ├── camera/          # Componentes de captura/subida de imagen
-│   │   │   ├── dashboard/       # Componentes de la pantalla principal y resultados
-│   │   │   └── ui/              # Componentes UI reutilizables
-│   │   ├── pages/               # Páginas de la aplicación (rutas)
+│   │   │   ├── mediapipe/       # Servicio de detección de pose con MediaPipe (cliente)
+│   │   │   └── yolo/            # Servicio de detección de objetos con YOLO (ONNX, cliente)
+│   │   ├── components/ai/rosa/  # Motor de cálculo ROSA (silla, pantalla, teclado)
+│   │   ├── context/             # AuthContext (sesión) es el único contexto en uso hoy
+│   │   ├── pages/                # Login, AutoEvaluationPage (flujo completo), AdminDashboard
 │   │   ├── services/
 │   │   │   └── SheetsService.ts # Cliente HTTP hacia el Apps Script (login, guardar, listar)
-│   │   ├── store/               # Estado global (Zustand u otro)
-│   │   └── App.tsx              # Raíz de la aplicación React
+│   │   └── App.tsx              # Raíz de la aplicación React (rutas)
 │   ├── .env.example             # Plantilla de variables de entorno
 │   ├── package.json
 │   └── vite.config.ts
+├── docs/                        # Especificación, arquitectura, auditoría, contratos (ver abajo)
 └── README.md                    # Este archivo
 ```
+
+> Nota: `src/` no coincide exactamente con el árbol de arriba en su
+> totalidad — existe una cantidad importante de componentes/páginas/contexts
+> sin usar, heredados de un diseño anterior por pasos. El árbol de arriba
+> muestra solo lo que está realmente en uso hoy. Ver `docs/ARCHITECTURE.md`
+> y `docs/AUDIT.md` para el detalle completo, incluyendo qué es código vivo
+> y qué es código muerto pendiente de una decisión de limpieza.
+
+## Documentación adicional
+
+Este proyecto mantiene documentación funcional/técnica centralizada en
+`docs/` — es la fuente de verdad de cómo debe comportarse el sistema y en
+qué estado está realmente, no solo este README:
+
+- [`docs/AUDIT.md`](docs/AUDIT.md) — auditoría técnica completa
+- [`docs/PROJECT_SPEC.md`](docs/PROJECT_SPEC.md) — especificación funcional única (React + Apps Script)
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — arquitectura de ambos clientes
+- [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md) — contrato de datos y discrepancias conocidas
+- [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md) — contrato de integraciones (incluye el punto de integración futura de Gemini en React)
+- [`docs/PARITY_MATRIX.md`](docs/PARITY_MATRIX.md) — paridad funcional React ↔ Apps Script
+- [`docs/CHANGELOG.md`](docs/CHANGELOG.md) — historial de cambios importantes
 
 ---
 
