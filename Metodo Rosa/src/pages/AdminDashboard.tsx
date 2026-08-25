@@ -58,7 +58,14 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     Promise.all([getAllEvaluations(), getAllUsers()])
-      .then(([evals, usrs]) => { setEvaluations(evals); setUsers(usrs); })
+      .then(([evals, usrs]) => {
+        // Defensivo: si el servidor responde ok:true sin "data" (o con un
+        // tipo inesperado), no dejar el estado en undefined — eso hacía
+        // fallar cualquier .filter()/.map() posterior con la app ya
+        // autenticada, mostrando el ErrorBoundary en vez de datos vacíos.
+        setEvaluations(Array.isArray(evals) ? evals : []);
+        setUsers(Array.isArray(usrs) ? usrs : []);
+      })
       .catch((err) => setError(err instanceof Error ? err.message : "Error cargando datos"))
       .finally(() => setLoading(false));
   }, []);

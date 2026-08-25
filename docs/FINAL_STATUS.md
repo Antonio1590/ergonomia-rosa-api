@@ -50,12 +50,18 @@ aportar (no son trabajo que se haya "dejado a medias" por elección propia).
   decorativo. Ver `docs/CHANGELOG.md` para el detalle completo.
 - Recomendaciones del motor ROSA reescritas en tono más cercano y menos
   clínico/alarmista.
+- Corregido un crash real del panel de administración (reproducido en vivo)
+  cuando el servidor responde sin `data` — el estado quedaba `undefined` y
+  cualquier `.filter()` posterior tronaba.
+- Panel de administración verificado función por función contra el backend
+  real: navegación, filtros, orden, vista mensual/trimestral y reportes,
+  todo confirmado funcionando.
 
 ## Funcionalidades pendientes
 
 | Pendiente | Por qué está pendiente | Quién puede desbloquearlo |
 |---|---|---|
-| **Verificar el orden real de columnas de la hoja `Metrica`** | Los 2 registros de usuario reales muestran datos sistemáticamente desalineados (correo donde debería ir la cédula, y viceversa) — podría ser un problema real de esquema o solo datos de prueba mal cargados | El usuario, revisando la hoja `Metrica` directamente en Google Sheets |
+| **Corregir manualmente 2 filas de la hoja `Metrica`** | El usuario confirmó que el orden de columnas (`Cedula, Email, Nombre, Rol, Estado, FechaRegistro`) coincide con lo que ya asume el código — el problema no es de código, son datos cargados en las celdas equivocadas en esas 2 filas específicas | El usuario, corrigiendo los valores directamente en Google Sheets |
 | Decidir el destino del código muerto de React (~mitad de `src/`) | Podría ser roadmap futuro (wizard por pasos) en vez de simplemente descartable | El usuario |
 | Decidir el destino del scaffold huérfano en la raíz (`FRONT/src`, `package.json`) | Ya no es necesario para el build (la dependencia de Tailwind se corrigió), pero podría contener trabajo que el usuario quiera conservar | El usuario |
 | Implementar `getUserHistory` en React | Es una decisión de alcance, no solo técnica: ¿React debe tener historial personal como Apps Script? | El usuario |

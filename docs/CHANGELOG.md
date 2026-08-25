@@ -2,6 +2,49 @@
 
 Registro de cambios importantes. Formato: fecha, qué cambió, por qué.
 
+## 2026-08-24 (continuación 2) — Verificación exhaustiva del panel + fix de crash
+
+### Bug corregido: el panel podía crashear si el servidor devolvía datos inesperados
+Al probar el panel en vivo repetidamente contra el backend real se reprodujo
+un crash real (capturado correctamente por el `ErrorBoundary`, pero antes
+lo dejaba en pantalla de error en vez de mostrar el panel):
+`TypeError: Cannot read properties of undefined (reading 'filter')`. Causa:
+si `getAllEvaluations()`/`getAllUsers()` alguna vez resuelven a algo que no
+es un array (respuesta del servidor sin `data`, por ejemplo durante uno de
+los 404 intermitentes observados en las pruebas), el estado quedaba
+`undefined` y cualquier `.filter()`/`.map()` posterior tronaba. Corregido en
+`AdminDashboard.tsx` con una guarda `Array.isArray(...) ? ... : []` al
+recibir la respuesta.
+
+### Verificación en vivo, funcionalidad por funcionalidad (contra datos reales de producción, sin escribir nada)
+- Navegación (nav superior, sidebar, selector de pestañas) — OK.
+- Filtro de búsqueda (evaluaciones y usuarios) — OK, probado con varios
+  términos.
+- Filtro por nivel de riesgo y por rol — OK, incluso combinado con búsqueda.
+- Orden por columna (Fecha) — OK, alterna asc/desc correctamente (un primer
+  intento de prueba pareció mostrar que no cambiaba, pero era un artefacto
+  de disparar dos clics en el mismo tick de JavaScript sin esperar al
+  re-render de React — con eventos reales, y confirmado con una espera
+  entre clics, sí alterna).
+- Vista mensual/trimestral — OK, la trimestral agrega promedios reales por
+  mes.
+- Pestaña Reportes — OK, muestra conteos reales y el botón de exportar CSV.
+- Los "404" intermitentes vistos en varias pruebas son fallas de red
+  pasajeras al llamar al Apps Script (confirmado: recargar la página
+  resuelve el problema y trae los mismos datos reales) — no es un bug de
+  código, aunque el panel no reintenta automáticamente hoy.
+
+### Columnas de la hoja `Metrica` — confirmado con el usuario
+El usuario confirmó que el orden real de columnas es exactamente
+`Cedula, Email, Nombre, Rol, Estado, FechaRegistro` — **igual** al que ya
+asumían `Auth.gs`/`Sheets.gs`. Esto descarta un bug de mapeo de columnas en
+el código. La anomalía vista en los 2 registros reales (un correo en la
+celda de cédula, un número en la celda de correo, "admin"/"Usuario" en la
+celda de nombre, una fecha en la celda de rol) es, por descarte, un
+problema de los **datos** de esas 2 filas específicas en la hoja real, no
+del código — requiere corrección manual directa en Google Sheets, no un
+cambio de código.
+
 ## 2026-08-24 (continuación) — Panel de administración: interactividad, filtros reales y bug de guardado
 
 ### Bug crítico corregido: "objetos detectados" nunca se guardaba
