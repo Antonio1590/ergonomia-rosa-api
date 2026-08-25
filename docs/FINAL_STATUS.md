@@ -50,7 +50,6 @@ aportar (no son trabajo que se haya "dejado a medias" por elección propia).
 | Implementar `getUserHistory` en React | Es una decisión de alcance, no solo técnica: ¿React debe tener historial personal como Apps Script? | El usuario |
 | Unificar persistencia de sesión (`localStorage` vs `sessionStorage`) | Es una decisión de UX/seguridad (¿la sesión debe sobrevivir el cierre del navegador o no?) | El usuario |
 | Confirmar si React tiene cuestionario editable o el cálculo es 100% automático | No se pudo confirmar en esta pasada de auditoría | Próxima pasada de QA |
-| Confirmar si el panel admin de React tiene gráficas | `recharts` no está en las dependencias reales de `Metodo Rosa` | Próxima pasada de QA |
 | Exportar CSV en React | No confirmado si existe; no es prioridad alta | Próxima iteración de desarrollo |
 | Agregar columnas `Nombre`/`Cedula` a la hoja `Registros` real | El código ya las escribe; la hoja de producción necesita los encabezados añadidos a mano | El usuario, directamente en Google Sheets |
 | Pruebas automatizadas (no existe ningún runner instalado) | Fuera del alcance de esta fase de estabilización | Iteración futura |
@@ -74,9 +73,16 @@ desactualizada.
   pantalla de login carga sin errores de consola.
 - Revisión estática de sintaxis de los archivos `.gs` modificados (sin
   compilador local disponible para Apps Script).
-- **No se ejecutaron pruebas end-to-end con credenciales reales** (login
-  real, guardado real de evaluación) para no generar datos de prueba en el
-  spreadsheet de producción ya conectado. Ver `docs/TEST_PLAN.md` para el
+- **Panel de administración verificado en vivo contra el backend real**
+  inyectando una sesión de prueba solo en `localStorage` del navegador (sin
+  login real, sin escribir ningún dato): cargó datos reales de evaluaciones
+  e historial sin errores. Esto confirmó además, con datos reales ya
+  guardados, el problema de escala de riesgo que se corrigió en esta misma
+  sesión (filas antiguas de React con la etiqueta `Mejorable` mezcladas con
+  filas de Apps Script con `Bajo`/`Medio`/`Alto`) — ver `docs/TEST_PLAN.md`.
+- **No se ejecutaron pruebas de escritura** (login real que genere sesión
+  propia, guardado real de una evaluación nueva) para no generar datos de
+  prueba en el spreadsheet de producción. Ver `docs/TEST_PLAN.md` para el
   detalle de qué falta verificar y por qué.
 
 ## Estado React

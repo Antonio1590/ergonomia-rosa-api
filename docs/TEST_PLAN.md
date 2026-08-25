@@ -20,7 +20,8 @@ Leyenda de estado: ✅ Pasa · ❌ Falla · ⏳ No verificable en este entorno
 | R7 | Captura/subida de foto y análisis (YOLO + MediaPipe) | ⏳ | Requiere una foto real de una persona sentada; no se ejecutó en este entorno |
 | R8 | Cálculo de puntaje ROSA se muestra con la etiqueta de riesgo correcta (Bajo/Medio/Alto/Muy Alto) | 🆕 ✅ (parcial) | Verificado por lectura de código tras el cambio de escala — no se ejecutó el flujo completo con una foto real |
 | R9 | Guardado de evaluación llega a Apps Script | ⏳ | Requiere sesión real + backend en producción; no ejecutado para no escribir datos de prueba en la hoja real |
-| R10 | Panel de administración carga el listado | ⏳ | Requiere sesión de un usuario `admin` real |
+| R10 | Panel de administración carga el listado, estadísticas e historial | 🆕 ✅ | Verificado inyectando una sesión de prueba solo en `localStorage` del navegador (sin login real, sin escribir nada) contra el backend real de producción — el panel cargó datos reales sin ningún error en consola. Sesión de prueba borrada inmediatamente después de verificar |
+| R10a | Panel de administración — gráficas/historial de puntajes | 🆕 ✅ | Confirmado: sí muestra una serie temporal de puntajes ("Historial de puntajes") con datos reales, contradice la sospecha de `docs/PARITY_MATRIX.md` de que podría faltar — **actualizar esa fila a "Completa"** |
 | R11 | Ruta `/admin` redirige a un usuario no-admin | No verificado | Revisar en una próxima pasada — lógica presente en `App.tsx`, no ejecutada end-to-end |
 | R12 | Una excepción de render no deja pantalla en blanco | No verificado | `ErrorBoundary` agregado a las rutas (`App.tsx`), no se forzó una excepción real para confirmar la UI de fallback |
 
@@ -49,6 +50,18 @@ real en esta sesión.
   recarga forzada del navegador; **no era un problema del código**, sino
   del caché de HMR del propio Vite durante la sesión de edición en vivo.
   Confirmado limpio en una pestaña nueva sin historial de consola.
+
+## Hallazgo confirmado con datos reales (sin escribir nada)
+
+Al verificar R10 contra el backend de producción se observó evidencia
+directa, en datos ya guardados, del problema de escala de riesgo descrito
+en `docs/DATA_MODEL.md`: filas antiguas guardadas por React aparecen con la
+etiqueta `Mejorable` (escala vieja de 5 niveles) mezcladas en la misma
+tabla con filas de Apps Script etiquetadas `Bajo`/`Medio`/`Alto` (escala de
+4 niveles). Esto confirma que el bug ya afectaba datos reales antes de esta
+corrección. Los guardados nuevos desde ahora usarán la escala unificada; no
+se modificaron las filas históricas (sería una operación de migración de
+datos, fuera del alcance de esta sesión, y no autorizada).
 
 ## Pendiente para la próxima pasada de QA
 

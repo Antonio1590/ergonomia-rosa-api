@@ -22,7 +22,7 @@ de forma equivalente — no que sean código idéntico.
 | Historial personal (`getUserHistory`) | **Faltante** | OK | **Pendiente en React** | Confirmado por búsqueda exhaustiva: React nunca llama esta acción, aunque el backend ya la soporta. Decisión de negocio pendiente: ¿implementarla en React? |
 | Análisis de foto vía Gemini (`analyzePhoto`) | **No conectado (a propósito)** | OK | **Pendiente — Fase 9 de este proyecto** | Marcado `TODO: GEMINI_INTEGRATION` en `docs/API_CONTRACT.md` §4. No debe conectarse todavía por regla explícita del proyecto |
 | Panel de administración — listado y filtros | OK | OK | Completa | — |
-| Panel de administración — gráficas | Pendiente de verificar | OK (`JS_Charts.html`: barras, línea, tabla) | **Pendiente de verificar** | `Metodo Rosa/package.json` no tiene ninguna librería de gráficas (`recharts` solo existe en el scaffold huérfano de la raíz, no en las dependencias reales del cliente React) — no se confirmó si `AdminDashboard.tsx` renderiza gráficas por otro medio o si esa parte del panel está incompleta |
+| Panel de administración — gráficas / historial | OK | OK (`JS_Charts.html`: barras, línea, tabla) | **Completa** | Confirmado en vivo contra el backend real (2026-08-24, ver `docs/TEST_PLAN.md` R10/R10a): `AdminDashboard.tsx` sí muestra un historial de puntajes con datos reales, sin usar `recharts` (no está en las dependencias) — implementación propia |
 | Exportar CSV | No confirmado | OK | **Probablemente ausente en React** | No se encontró la funcionalidad en la revisión de `AdminDashboard.tsx`; no se implementó como parte de esta fase por no ser prioridad "Alta" en `docs/AUDIT.md` |
 | Configuración sin secretos en código (`SPREADSHEET_ID`/`ADMIN_EMAILS`) | N/A (no aplica a React) | OK | Completa | Migrado a `PropertiesService` con compatibilidad hacia atrás el 2026-08-24 |
 | Persistencia de sesión | `localStorage` (persiste entre cierres de navegador) | `sessionStorage` (se pierde al cerrar pestaña) | **Divergencia sin resolver** | Comportamiento de UX/seguridad distinto entre clientes, no corregido en esta fase — requiere decisión de negocio sobre cuál es el comportamiento deseado |
@@ -32,8 +32,8 @@ de forma equivalente — no que sean código idéntico.
 
 ## Resumen
 
-- **Completa (equivalente en ambos lados):** 14 de 20 filas.
+- **Completa (equivalente en ambos lados):** 15 de 20 filas.
 - **Divergencia justificada (documentada, no es un defecto):** 3 filas (análisis de objetos, análisis de pose, ángulo de muñeca).
-- **Pendiente de verificar (falta información, no falta trabajo confirmado):** 3 filas (cuestionario editable en React, gráficas del panel, CSV).
+- **Pendiente de verificar (falta información, no falta trabajo confirmado):** 2 filas (cuestionario editable en React, CSV).
 - **Pendiente por decisión de negocio:** 2 filas de decisión pendiente (historial en React, código muerto), 1 fila de divergencia sin resolver (persistencia de sesión).
 - **Deliberadamente pendiente por regla del proyecto:** 1 fila (`analyzePhoto`/Gemini en React).
