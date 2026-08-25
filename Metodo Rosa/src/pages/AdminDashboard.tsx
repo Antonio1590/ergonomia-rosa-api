@@ -652,31 +652,6 @@ export default function AdminDashboard() {
             )}
           </section>
 
-          {/* ── Hero section ── */}
-          <section className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center bg-[#006D32] text-white rounded-3xl overflow-hidden shadow-lg p-8 lg:p-10">
-            <div className="space-y-5">
-              <h2 className="text-2xl font-black leading-tight">Evaluación Clínica<br />de Precisión</h2>
-              <p className="text-white/80 text-sm leading-relaxed">
-                La metodología ROSA permite identificar estresores ergonómicos específicos antes de que se conviertan en trastornos musculoesqueléticos crónicos. El monitoreo continuo es el primer paso hacia la salud física a largo plazo.
-              </p>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => navigate("/")}
-                  className="px-5 py-2.5 bg-[#9bf7ac] text-[#00210b] font-bold rounded-xl text-sm hover:scale-105 transition-transform">
-                  Nueva evaluación
-                </button>
-                <button
-                  onClick={() => goTo("evaluaciones")}
-                  className="px-5 py-2.5 border border-white/40 text-white font-bold rounded-xl text-sm hover:bg-white/10 transition">
-                  Ver evaluaciones
-                </button>
-              </div>
-            </div>
-            <div className="relative h-56 md:h-64 rounded-2xl overflow-hidden shadow-2xl bg-white/10 flex items-center justify-center">
-              <span className="material-symbols-outlined text-white/30 text-[120px]">clinical_notes</span>
-            </div>
-          </section>
-
         </main>
       </div>
 
