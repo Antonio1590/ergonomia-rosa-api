@@ -11,8 +11,8 @@ import { saveEvaluation, saveTrainingData, uploadPhoto } from "../services/Sheet
 import type { BodyAngles } from "../ai/mediapipe/AngleCalculator";
 import DetectionOverlay from "../components/DetectionOverlay";
 import type { DetectionStatus } from "../components/DetectionOverlay";
-import { SeatedPostureArt, DeskTopArt } from "../components/illustrations/ErgonomicArt";
-import type { ZoneStatus, PostureZones, DeskItems } from "../components/illustrations/ErgonomicArt";
+import { SeatedPostureArt } from "../components/illustrations/ErgonomicArt";
+import type { ZoneStatus, PostureZones } from "../components/illustrations/ErgonomicArt";
 import GuidePhoto from "../components/GuidePhoto";
 import { LoadingSpinner } from "../components/common/LoadingSpinner";
 
@@ -357,16 +357,6 @@ function zonesFromResult(r: CombinedResult): PostureZones {
     chair:   scoreToStatus(legsScoreOf(a)),
     monitor: m.hasMonitor ? scoreToStatus(m.monitorScore) : "missing",
     desk:    m.hasDesk ? (m.deskHeightStatus === "high" ? "warn" : "ok") : "missing",
-  };
-}
-
-function deskItemsFromMetrics(m: WorkstationMetrics): DeskItems {
-  return {
-    desk:     m.hasDesk ? (m.deskHeightStatus === "high" ? "warn" : "ok") : "missing",
-    monitor:  m.hasMonitor ? scoreToStatus(m.monitorScore) : "missing",
-    keyboard: m.hasKeyboard ? "ok" : "missing",
-    mouse:    m.hasMouse ? "ok" : "missing",
-    phone:    m.hasPhone ? (m.phoneNearNeck ? "error" : "ok") : "missing",
   };
 }
 
@@ -872,20 +862,10 @@ export default function AutoEvaluationPage() {
       phone: "smartphone", chair: "chair", document_holder: "description",
     };
 
-    const OBJ_NOTE: Record<string, string> = {
-      monitor: metrics.monitorScore === 1 ? "Altura adecuada" : metrics.monitorScore === 2 ? "Por debajo del nivel de ojos" : "Por encima del nivel de ojos",
-      laptop:  "Pantalla de trabajo",
-      mouse:   "Al alcance de la mano",
-      desk:    metrics.deskHeightStatus === "high" ? "Por encima del nivel del codo" : "Superficie de trabajo",
-      phone:   metrics.phoneNearNeck ? "¡Sostenido con el cuello!" : "Sobre el escritorio",
-      chair:   "Asiento de trabajo",
-      document_holder: "Atril en uso",
-    };
 
+    // Solo lo que no está ya cubierto por el diagrama corporal (cuello/tronco/
+    // rodillas viven ahí) — evita repetir el mismo dato dos veces en la página.
     const workstationChips: { icon: string; label: string; value: string; status: "ok" | "warn" | "error" | "neutral" }[] = [
-      { icon: "straighten",        label: "Cuello",   value: `${avgAngles.neck.toFixed(1)}°`,  status: avgAngles.neck <= 10 ? "ok" : avgAngles.neck <= 20 ? "warn" : "error" },
-      { icon: "accessibility_new", label: "Tronco",   value: `${avgAngles.trunk.toFixed(1)}°`, status: avgAngles.trunk <= 5 ? "ok" : avgAngles.trunk <= 20 ? "warn" : "error" },
-      { icon: "airline_seat_recline_normal", label: "Rodillas", value: kneeAvg > 0 ? `${kneeAvg.toFixed(1)}°` : "No medido", status: kneeAvg === 0 ? "neutral" : legsScoreOf(avgAngles) === 1 ? "ok" : "warn" },
       { icon: "monitor",           label: "Monitor",  value: metrics.hasMonitor ? (metrics.monitorScore === 1 ? "Altura óptima" : metrics.monitorScore === 2 ? "Demasiado bajo" : "Demasiado alto") : "No detectado", status: !metrics.hasMonitor ? "neutral" : metrics.monitorScore === 1 ? "ok" : "warn" },
       { icon: "table_restaurant",  label: "Escritorio", value: metrics.hasDesk ? (metrics.deskHeightStatus === "high" ? "Muy alto" : "Altura adecuada") : "No detectado", status: !metrics.hasDesk ? "neutral" : metrics.deskHeightStatus === "high" ? "warn" : "ok" },
       { icon: "smartphone",        label: "Teléfono", value: metrics.hasPhone ? (metrics.phoneNearNeck ? "¡Entre cuello y hombro!" : "Sobre el escritorio") : "No detectado", status: !metrics.hasPhone ? "neutral" : metrics.phoneNearNeck ? "error" : "ok" },
@@ -895,7 +875,7 @@ export default function AutoEvaluationPage() {
       <div className="min-h-screen bg-[#F0F7F2]">
         {navBar}
         {fileInputs}
-        <div className="pt-20 pb-28 px-4 max-w-2xl mx-auto">
+        <div className="pt-20 pb-28 px-4 max-w-2xl lg:max-w-4xl mx-auto">
 
           {/* Selector de fotos de la sesión */}
           <div className="mt-6 mb-5 flex items-center gap-3 flex-wrap">
@@ -940,156 +920,100 @@ export default function AutoEvaluationPage() {
             </div>
           </div>
 
-          {/* Acciones prioritarias — visibles sin desplazarse */}
-          <div className="bg-white rounded-3xl border border-gray-100 p-6 mb-5 shadow-sm">
-            <h3 className="font-bold text-gray-900 mb-1 flex items-center gap-2">
-              <span className="material-symbols-outlined text-[#FF6B00]">priority_high</span>
-              Qué corregir primero
-            </h3>
-            <p className="text-xs text-gray-400 mb-4">
-              Las {Math.min(3, recommendations.length)} acciones de mayor impacto para tu puesto
-            </p>
-            <div className="space-y-3">
-              {recommendations.slice(0, 3).map((rec, i) => (
-                <div key={rec} className="flex items-start gap-3 p-3 rounded-xl bg-orange-50 border border-orange-100">
-                  <div className="w-6 h-6 rounded-full bg-[#FF6B00] text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
-                    {i + 1}
+          {/* Foto analizada + diagrama corporal, en bloque uno al lado del otro
+              en pantallas grandes — evita el desplazamiento largo en vertical. */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
+
+            {/* Tu foto con lo que la IA encontró (incluye los objetos detectados,
+                ya no en una tarjeta aparte) */}
+            {photo && (
+              <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm">
+                <h3 className="font-bold text-gray-900 mb-1 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[#006D32]">center_focus_strong</span>
+                  Lo que la IA identificó
+                </h3>
+                <p className="text-xs text-gray-400 mb-4">
+                  Esqueleto postural y objetos reconocidos sobre tu foto
+                </p>
+                <DetectionOverlay
+                  src={photo.previewUrl}
+                  detections={photo.detections}
+                  landmarks={photo.landmarks}
+                  statusByClass={clsStatus}
+                />
+                <ColorLegend />
+                {foundObjects.length > 0 && (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {foundObjects.map((d) => {
+                      const st = clsStatus[d.className] ?? "ok";
+                      const tone = st === "error"
+                        ? "bg-red-50 border-red-200 text-red-700"
+                        : st === "warn"
+                        ? "bg-yellow-50 border-yellow-200 text-yellow-700"
+                        : "bg-green-50 border-green-200 text-green-700";
+                      return (
+                        <span key={d.className} className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold ${tone}`}>
+                          <span className="material-symbols-outlined text-sm">{OBJ_ICON[d.className] ?? "widgets"}</span>
+                          {d.label} · {Math.round(d.confidence * 100)}%
+                        </span>
+                      );
+                    })}
                   </div>
-                  <p className="text-sm text-gray-700">{rec}</p>
-                </div>
-              ))}
-            </div>
-            {recommendations.length > 3 && (
-              <p className="text-xs text-gray-400 mt-3">
-                +{recommendations.length - 3} recomendación{recommendations.length - 3 > 1 ? "es" : ""} adicional{recommendations.length - 3 > 1 ? "es" : ""} más abajo
-              </p>
+                )}
+              </div>
             )}
-          </div>
 
-          {/* Tu foto con lo que la IA encontró */}
-          {photo && (
-            <div className="bg-white rounded-3xl border border-gray-100 p-6 mb-5 shadow-sm">
+            {/* Diagrama corporal + los mismos ángulos, en la misma tarjeta */}
+            <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm">
               <h3 className="font-bold text-gray-900 mb-1 flex items-center gap-2">
-                <span className="material-symbols-outlined text-[#006D32]">center_focus_strong</span>
-                Lo que la IA identificó en tu foto
+                <span className="material-symbols-outlined text-[#006D32]">body_system</span>
+                Qué debes corregir
               </h3>
-              <p className="text-xs text-gray-400 mb-4">
-                Esqueleto postural y objetos reconocidos sobre tu fotografía original
+              <p className="text-xs text-gray-400 mb-2">
+                Las zonas en ámbar o rojo son las que requieren tu atención
               </p>
-              <DetectionOverlay
-                src={photo.previewUrl}
-                detections={photo.detections}
-                landmarks={photo.landmarks}
-                statusByClass={clsStatus}
-              />
+              <SeatedPostureArt zones={zonesFromResult(combined)} showLabels className="w-full h-auto" />
               <ColorLegend />
-            </div>
-          )}
-
-          {/* Objetos detectados — sólo si se encontró alguno */}
-          {foundObjects.length > 0 && (
-            <div className="bg-white rounded-3xl border border-gray-100 p-6 mb-5 shadow-sm">
-              <h3 className="font-bold text-gray-900 mb-1 flex items-center gap-2">
-                <span className="material-symbols-outlined text-[#006D32]">inventory_2</span>
-                Objetos encontrados en tu puesto
-                <span className="ml-auto text-xs font-semibold bg-[#EEF7F2] text-[#005224] px-2.5 py-1 rounded-full">
-                  {foundObjects.length}
-                </span>
-              </h3>
-              <p className="text-xs text-gray-400 mb-4">Sólo se listan los elementos que el modelo reconoció</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {foundObjects.map((d) => {
-                  const st = clsStatus[d.className] ?? "ok";
-                  const tone = st === "error"
-                    ? "bg-red-50 border-red-200 text-red-700"
-                    : st === "warn"
-                    ? "bg-yellow-50 border-yellow-200 text-yellow-700"
-                    : "bg-green-50 border-green-200 text-green-700";
-                  return (
-                    <div key={d.className} className={`flex items-center gap-3 rounded-xl border p-3 ${tone}`}>
-                      <span className="material-symbols-outlined shrink-0">{OBJ_ICON[d.className] ?? "widgets"}</span>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-bold truncate">{d.label}</p>
-                        <p className="text-xs opacity-80 truncate">{OBJ_NOTE[d.className] ?? "Detectado"}</p>
-                      </div>
-                      <span className="text-xs font-bold opacity-70 shrink-0">{Math.round(d.confidence * 100)}%</span>
-                    </div>
-                  );
-                })}
+              <div className="grid grid-cols-2 gap-2 mt-4">
+                {bodyParts.map((p) => <BodyPartCard key={p.label} {...p} />)}
               </div>
             </div>
-          )}
 
-          {/* Esquema corporal coloreado */}
-          <div className="bg-white rounded-3xl border border-gray-100 p-6 mb-5 shadow-sm">
-            <h3 className="font-bold text-gray-900 mb-1 flex items-center gap-2">
-              <span className="material-symbols-outlined text-[#006D32]">body_system</span>
-              Qué debes corregir
-            </h3>
-            <p className="text-xs text-gray-400 mb-2">
-              Las zonas en ámbar o rojo son las que requieren tu atención
-            </p>
-            <SeatedPostureArt zones={zonesFromResult(combined)} showLabels className="w-full h-auto" />
-            <ColorLegend />
-          </div>
-
-          {/* Esquema del escritorio */}
-          <div className="bg-white rounded-3xl border border-gray-100 p-6 mb-5 shadow-sm">
-            <h3 className="font-bold text-gray-900 mb-1 flex items-center gap-2">
-              <span className="material-symbols-outlined text-[#006D32]">desktop_windows</span>
-              Tu escritorio según la IA
-            </h3>
-            <p className="text-xs text-gray-400 mb-2">
-              Los elementos atenuados en gris no aparecieron en la fotografía
-            </p>
-            <DeskTopArt items={deskItemsFromMetrics(metrics)} className="w-full h-auto" />
           </div>
 
           {/* Puntajes parciales */}
-          <div className="grid grid-cols-2 gap-3 mb-5">
-            {[
-              { label: "Silla y postura", value: scores.chair,         icon: "chair" },
-              { label: "Pantalla",        value: scores.monitorPhone,  icon: "monitor" },
-              { label: "Teclado y mouse", value: scores.keyboardMouse, icon: "keyboard" },
-              { label: "Puesto total",    value: scores.workstation,   icon: "workspaces" },
-            ].map(({ label, value, icon }) => (
-              <div key={label} className="bg-white rounded-2xl border border-gray-100 p-4 flex items-center gap-3 shadow-sm">
-                <div className="w-10 h-10 rounded-xl bg-[#EEF7F2] flex items-center justify-center shrink-0">
-                  <span className="material-symbols-outlined text-[#006D32] text-lg">{icon}</span>
+          {/* Puntajes por categoría + resumen del puesto, en bloque */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
+            <div className="grid grid-cols-2 gap-3 content-start">
+              {[
+                { label: "Silla y postura", value: scores.chair,         icon: "chair" },
+                { label: "Pantalla",        value: scores.monitorPhone,  icon: "monitor" },
+                { label: "Teclado y mouse", value: scores.keyboardMouse, icon: "keyboard" },
+                { label: "Puesto total",    value: scores.workstation,   icon: "workspaces" },
+              ].map(({ label, value, icon }) => (
+                <div key={label} className="bg-white rounded-2xl border border-gray-100 p-4 flex items-center gap-3 shadow-sm">
+                  <div className="w-10 h-10 rounded-xl bg-[#EEF7F2] flex items-center justify-center shrink-0">
+                    <span className="material-symbols-outlined text-[#006D32] text-lg">{icon}</span>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-black text-gray-900">{value}</p>
+                    <p className="text-xs text-gray-400">{label}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-2xl font-black text-gray-900">{value}</p>
-                  <p className="text-xs text-gray-400">{label}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Análisis postural por zonas */}
-          <div className="bg-white rounded-3xl border border-gray-100 p-6 mb-5 shadow-sm">
-            <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
-              <span className="material-symbols-outlined text-[#006D32]">straighten</span>
-              Ángulos medidos
-              {analyses.length > 1 && (
-                <span className="text-xs text-gray-400 font-normal">(promedio de {analyses.length} fotos)</span>
-              )}
-            </h3>
-            <div className="grid grid-cols-2 gap-3">
-              {bodyParts.map((p) => <BodyPartCard key={p.label} {...p} />)}
+              ))}
             </div>
-          </div>
 
-          {/* Métricas resumidas */}
-          <div className="bg-white rounded-3xl border border-gray-100 p-6 mb-5 shadow-sm">
-            <h3 className="font-bold text-gray-900 mb-1 flex items-center gap-2">
-              <span className="material-symbols-outlined text-[#006D32]">sensors</span>
-              Resumen de métricas
-            </h3>
-            <p className="text-xs text-gray-400 mb-4">
-              Derivadas automáticamente de {analyses.length > 1 ? "las fotos combinadas" : "tu foto"}
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {workstationChips.map((c) => <MetricChip key={c.label} {...c} />)}
+            <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm">
+              <h3 className="font-bold text-gray-900 mb-1 flex items-center gap-2">
+                <span className="material-symbols-outlined text-[#006D32]">sensors</span>
+                Resumen del puesto
+              </h3>
+              <p className="text-xs text-gray-400 mb-4">
+                Derivadas automáticamente de {analyses.length > 1 ? "las fotos combinadas" : "tu foto"}
+              </p>
+              <div className="grid grid-cols-1 gap-2">
+                {workstationChips.map((c) => <MetricChip key={c.label} {...c} />)}
+              </div>
             </div>
           </div>
 
@@ -1097,7 +1021,7 @@ export default function AutoEvaluationPage() {
           <div className="bg-white rounded-3xl border border-gray-100 p-6 mb-5 shadow-sm">
             <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
               <span className="material-symbols-outlined text-[#FF6B00]">tips_and_updates</span>
-              Todas las recomendaciones
+              Recomendaciones
               <span className="ml-auto text-xs font-semibold bg-orange-50 text-[#FF6B00] px-2.5 py-1 rounded-full">
                 {recommendations.length}
               </span>
@@ -1169,7 +1093,7 @@ export default function AutoEvaluationPage() {
 
         {/* Barra fija: guardar sin recorrer todo el informe */}
         <div className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur border-t border-gray-100 px-4 py-3 z-40">
-          <div className="max-w-2xl mx-auto">
+          <div className="max-w-2xl lg:max-w-4xl mx-auto">
             {!saved ? (
               <button
                 onClick={handleSave}
