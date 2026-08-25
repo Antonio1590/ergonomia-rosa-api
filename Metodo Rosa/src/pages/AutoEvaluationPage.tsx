@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/useAuth";
 import { detectPose } from "../ai/mediapipe/PoseService";
 import { calculateBodyAngles } from "../ai/mediapipe/AngleCalculator";
@@ -461,6 +462,7 @@ function ColorLegend() {
 ════════════════════════════════════ */
 export default function AutoEvaluationPage() {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [phase, setPhase]       = useState<Phase>("guide");
   const [analysisStep, setStep] = useState(0);
   const [analyses, setAnalyses] = useState<PhotoAnalysis[]>([]);
@@ -673,6 +675,11 @@ export default function AutoEvaluationPage() {
       </div>
       {user && (
         <div className="flex items-center gap-2">
+          <button onClick={() => navigate("/historial")}
+            className="hidden sm:flex items-center gap-1.5 text-sm text-gray-600 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition">
+            <span className="material-symbols-outlined text-base">history</span>
+            Mi historial
+          </button>
           <span className="material-symbols-outlined text-[#006D32]">account_circle</span>
           <span className="text-sm text-gray-600 hidden sm:block">{user.nombre || user.email}</span>
           <button onClick={logout}

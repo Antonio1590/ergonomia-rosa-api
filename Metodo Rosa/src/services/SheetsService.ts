@@ -125,6 +125,23 @@ export async function getAllEvaluations(): Promise<EvaluationRecord[]> {
   return call<EvaluationRecord[]>("getEvaluations");
 }
 
+// Historial de un solo colaborador — igual forma que devuelve
+// AppsScript/Sheets.gs → handleGetUserHistory (ver docs/API_CONTRACT.md).
+export interface UserHistoryEntry {
+  fecha: string;
+  puntajeFinal: number;
+  nivelRiesgo: string;
+  urlImagen?: string;
+  silla: number;
+  pantalla: number;
+  teclado: number;
+  recomendaciones?: string;
+}
+
+export async function getUserHistory(email: string): Promise<UserHistoryEntry[]> {
+  return call<UserHistoryEntry[]>("getUserHistory", { email });
+}
+
 export async function getAllUsers(): Promise<AppUser[]> {
   return call<AppUser[]>("getUsers");
 }

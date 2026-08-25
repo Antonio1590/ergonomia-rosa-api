@@ -8,6 +8,7 @@ import { LoadingSpinner } from "./components/common/LoadingSpinner";
 import Login from "./pages/Login";
 import AdminDashboard from "./pages/AdminDashboard";
 import AutoEvaluationPage from "./pages/AutoEvaluationPage";
+import HistoryPage from "./pages/HistoryPage";
 
 
 /* =========================================================
@@ -62,6 +63,15 @@ export default function App() {
                 {user?.rol === "admin"
                   ? <AdminDashboard />
                   : <Navigate to="/" replace />}
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/historial"
+            element={
+              <ProtectedRoute>
+                <HistoryPage />
               </ProtectedRoute>
             }
           />
