@@ -40,17 +40,27 @@ aportar (no son trabajo que se haya "dejado a medias" por elección propia).
   fuente oficial (Sonne, Villalta & Andrews, 2012); se corrigieron las tres
   tablas de React (`RosaEngine.ts`) para que coincidan exactamente,
   verificado con comparación programática celda por celda.
+- **Bug crítico de guardado corregido**: React nunca persistía "objetos
+  detectados" (ni los sub-puntajes por sección) porque enviaba un campo que
+  el servidor ignora — confirmado con datos reales de producción, corregido
+  en `AutoEvaluationPage.tsx` y `Step4Result.tsx`.
+- **Panel de administración**: navegación, filtros (búsqueda + nivel de
+  riesgo / rol), orden de columnas, vista mensual/trimestral real y
+  exportación CSV — todo interactivo y funcional, antes en su mayoría
+  decorativo. Ver `docs/CHANGELOG.md` para el detalle completo.
+- Recomendaciones del motor ROSA reescritas en tono más cercano y menos
+  clínico/alarmista.
 
 ## Funcionalidades pendientes
 
 | Pendiente | Por qué está pendiente | Quién puede desbloquearlo |
 |---|---|---|
+| **Verificar el orden real de columnas de la hoja `Metrica`** | Los 2 registros de usuario reales muestran datos sistemáticamente desalineados (correo donde debería ir la cédula, y viceversa) — podría ser un problema real de esquema o solo datos de prueba mal cargados | El usuario, revisando la hoja `Metrica` directamente en Google Sheets |
 | Decidir el destino del código muerto de React (~mitad de `src/`) | Podría ser roadmap futuro (wizard por pasos) en vez de simplemente descartable | El usuario |
 | Decidir el destino del scaffold huérfano en la raíz (`FRONT/src`, `package.json`) | Ya no es necesario para el build (la dependencia de Tailwind se corrigió), pero podría contener trabajo que el usuario quiera conservar | El usuario |
 | Implementar `getUserHistory` en React | Es una decisión de alcance, no solo técnica: ¿React debe tener historial personal como Apps Script? | El usuario |
 | Unificar persistencia de sesión (`localStorage` vs `sessionStorage`) | Es una decisión de UX/seguridad (¿la sesión debe sobrevivir el cierre del navegador o no?) | El usuario |
 | Confirmar si React tiene cuestionario editable o el cálculo es 100% automático | No se pudo confirmar en esta pasada de auditoría | Próxima pasada de QA |
-| Exportar CSV en React | No confirmado si existe; no es prioridad alta | Próxima iteración de desarrollo |
 | Agregar columnas `Nombre`/`Cedula` a la hoja `Registros` real | El código ya las escribe; la hoja de producción necesita los encabezados añadidos a mano | El usuario, directamente en Google Sheets |
 | Pruebas automatizadas (no existe ningún runner instalado) | Fuera del alcance de esta fase de estabilización | Iteración futura |
 | Corregir los 12 errores de lint restantes | Todos viven en código muerto — depende de la decisión de código muerto de arriba | Después de esa decisión |

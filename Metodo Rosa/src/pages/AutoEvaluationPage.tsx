@@ -641,17 +641,21 @@ export default function AutoEvaluationPage() {
       await saveEvaluation({
         fecha:        new Date().toISOString(),
         email:        user.email,
+        nombre:       user.nombre,
+        cedula:       user.cedula,
         puntajeFinal: rosaResult.scores.final,
         nivelRiesgo:  rosaResult.action.risk,
         postura:      rosaResult.action.risk,
         urlImagen:    analyses.map((a) => a.driveUrl).filter(Boolean).join(" | "),
-        detalles: JSON.stringify({
-          silla:    rosaResult.scores.chair,
-          pantalla: rosaResult.scores.monitorPhone,
-          teclado:  rosaResult.scores.keyboardMouse,
-          objetos:  allDetections.map((d) => d.label).join(", "),
-          fotos:    analyses.length,
-        }),
+        // El servidor (Sheets.gs → handleSaveEvaluation) reconstruye la
+        // columna "Detalles" a partir de estos campos sueltos — no lee
+        // "detalles" directamente. Antes se enviaba un "detalles" ya armado
+        // que el servidor simplemente ignoraba y sobrescribía con undefined,
+        // por lo que "objetos detectados" nunca quedaba guardado.
+        puntajeSilla:       rosaResult.scores.chair,
+        puntajePantalla:    rosaResult.scores.monitorPhone,
+        puntajeTeclado:     rosaResult.scores.keyboardMouse,
+        objetosDetectados:  allDetections.map((d) => d.label),
         recomendaciones: rosaResult.recommendations.join(" | "),
         neck:  Number(avgAngles.neck.toFixed(1)),
         trunk: Number(avgAngles.trunk.toFixed(1)),

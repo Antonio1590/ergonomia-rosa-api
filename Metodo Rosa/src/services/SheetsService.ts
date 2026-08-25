@@ -36,11 +36,31 @@ export interface EvaluationRecord {
   // campos derivados que devuelve Apps Script al listar evaluaciones
   nombre?: string;
   cedula?: string;
-  // campos para compatibilidad interna (no van a la hoja directamente)
+  // Al guardar: el servidor (Sheets.gs) arma la columna "Detalles" a partir
+  // de estos 4 campos — no leas/escribas "detalles" directamente.
+  // Al listar: el servidor solo devuelve "detalles" (JSON string); usa
+  // parseDetalles() más abajo para extraer estos mismos valores de vuelta.
   puntajeSilla?: number;
   puntajePantalla?: number;
   puntajeTeclado?: number;
-  objetosDetectados?: string;
+  objetosDetectados?: string[];
+}
+
+interface EvaluationDetalles {
+  silla?: number;
+  pantalla?: number;
+  teclado?: number;
+  objetos?: string[] | string;
+}
+
+/** Parsea el JSON de EvaluationRecord.detalles; nunca lanza. */
+export function parseDetalles(detalles?: string): EvaluationDetalles {
+  if (!detalles) return {};
+  try {
+    return JSON.parse(detalles) as EvaluationDetalles;
+  } catch {
+    return {};
+  }
 }
 
 

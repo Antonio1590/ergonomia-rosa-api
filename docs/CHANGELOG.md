@@ -2,6 +2,83 @@
 
 Registro de cambios importantes. Formato: fecha, qué cambió, por qué.
 
+## 2026-08-24 (continuación) — Panel de administración: interactividad, filtros reales y bug de guardado
+
+### Bug crítico corregido: "objetos detectados" nunca se guardaba
+`AutoEvaluationPage.tsx` (`handleSave`) armaba su propio campo `detalles`
+(JSON ya construido) y lo enviaba a `saveEvaluation` — pero
+`Sheets.gs → handleSaveEvaluation` **ignora ese campo** y reconstruye
+`Detalles` a partir de `record.puntajeSilla`, `record.puntajePantalla`,
+`record.puntajeTeclado` y `record.objetosDetectados`, que React nunca
+enviaba. Resultado: todas las evaluaciones guardadas desde React tenían la
+columna `Detalles` vacía (`{}`), y por eso "Objetos detectados" siempre
+aparecía en blanco en el panel de administración — confirmado con datos
+reales de producción. Corregido enviando los campos correctos (mismo
+nombre que ya usa Apps Script, ver `docs/DATA_MODEL.md`). También se
+empezó a enviar `nombre`/`cedula` en el guardado (ver corrección de Apps
+Script del commit anterior). Aplicado tanto en `AutoEvaluationPage.tsx`
+(vivo) como en `Step4Result.tsx` (código muerto, corregido por
+consistencia).
+
+### `AdminDashboard.tsx` — interactividad y filtros reales
+- Navegación (nav superior + sidebar) ahora cambia de sección de verdad —
+  antes eran `<span>`/`<div>` decorativos sin `onClick`.
+- Sidebar simplificado: ya no repite "Resumen general"/"Evaluaciones"/
+  "Usuarios", que ya viven en el nav superior y en pantallas ≥1024px se
+  veían duplicados en dos lugares a la vez llamando a lo mismo. El sidebar
+  ahora solo tiene "Reportes" (única opción que no está en el nav superior)
+  y "Nueva evaluación".
+- Filtros reales y funcionando: búsqueda por nombre/correo/cédula y filtro
+  por nivel de riesgo (construido dinámicamente desde los valores que
+  realmente existen en los datos, incluyendo etiquetas antiguas como
+  "Mejorable" — no se ocultan datos históricos) en la tabla de
+  evaluaciones; búsqueda y filtro por rol en la de usuarios.
+- Orden real por columna (Fecha/Puntaje, clic para invertir) en la tabla
+  de evaluaciones.
+- "Vista mensual/trimestral" ahora cambia de verdad los datos del
+  historial (mensual = últimas evaluaciones individuales; trimestral =
+  promedio agregado por mes, igual que `Dashboard.promedioMensual()` en
+  Apps Script) — antes era decorativo.
+- Nueva pestaña "Reportes" con exportación CSV real (evaluaciones y
+  usuarios, respetando los filtros activos) — cubre el pendiente de CSV
+  identificado en `docs/PARITY_MATRIX.md`. Se agregó también como opción
+  siempre visible en el selector de pestañas, porque el sidebar (`lg:`) y
+  el nav superior (`md:`) se ocultan en pantallas más chicas y "Reportes"
+  quedaría inalcanzable si solo viviera ahí.
+- Consistencia de color de riesgo: el número grande de puntaje usaba
+  umbrales propios (`≤4`/`≤5`/`>5`) que no coincidían con las 4 etiquetas
+  reales de riesgo: ahora ambos usan la misma paleta (`RISK_CONFIG`, los
+  mismos hex que Apps Script) para que el color y la etiqueta nunca se
+  contradigan.
+- "Objetos detectados" ahora se lee de verdad (parseando `detalles`,
+  función `parseDetalles` nueva en `SheetsService.ts`) en vez de un campo
+  que el servidor nunca devuelve.
+- Botones "Nueva evaluación" conectados a la navegación real
+  (`useNavigate`); reemplazado el botón "Documentación" (sin destino real)
+  por "Ver evaluaciones"; quitados los enlaces de footer que apuntaban a
+  `href="#"` sin ninguna función; quitada la imagen de héroe externa
+  (`lh3.googleusercontent.com`, dependencia de terceros no versionada,
+  señalada en `docs/AUDIT.md`) por un ícono propio del sistema.
+- Recomendaciones (`RosaEngine.ts → generateRecommendations`) reescritas
+  en tono cercano y accionable (segunda persona, sin fraseo clínico ni
+  alarmista), alineadas con el tono que ya usaba `AppsScript/JS_Rosa.html`.
+
+### Hallazgo nuevo, reportado pero NO corregido — requiere revisión directa del usuario
+Al verificar el panel de "Usuarios" contra los 2 registros reales de la
+hoja `Metrica`, los valores aparecen sistemáticamente desalineados: lo que
+el sistema etiqueta "cédula" contiene un correo, lo que etiqueta "correo"
+contiene un número de cédula, lo que etiqueta "nombre" contiene un valor
+tipo rol ("admin"/"Usuario"), y lo que etiqueta "rol" contiene una fecha.
+Esto podría significar que el orden real de columnas en la hoja `Metrica`
+de producción no coincide con el que asumen `Auth.gs`/`Sheets.gs`
+(`A=Cédula B=Email C=Nombre D=Rol E=Estado F=FechaRegistro`, ver
+`Auth.gs:3`) — o que estas 2 filas específicas son datos de prueba
+cargados manualmente en el orden equivocado. **No se modificó ningún
+código de login/lectura de usuarios a partir de esta observación**: hacerlo
+sin confirmar la estructura real de la hoja arriesgaba romper el login de
+usuarios que hoy sí funciona. Requiere que el usuario abra la hoja
+`Metrica` real y confirme el orden real de las columnas A–F.
+
 ## 2026-08-24 — Auditoría inicial y estabilización (Fases 1–8)
 
 ### Documentación (nueva)

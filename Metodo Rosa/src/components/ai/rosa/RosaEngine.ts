@@ -560,13 +560,16 @@ function generateRecommendations(
 
   const recommendations: string[] = [];
 
+  // Tono cercano y accionable (en segunda persona), alineado con
+  // AppsScript/JS_Rosa.html — evita fraseo clínico/alarmista, describe
+  // siempre la acción concreta a hacer.
   if (
     assessment.chair.height > 1 ||
     assessment.chair.insufficientLegSpace ||
     assessment.chair.heightNotAdjustable
   ) {
     recommendations.push(
-      "Ajustar la altura de la silla y garantizar el apoyo adecuado de los pies y el espacio suficiente para las piernas."
+      "Ajusta la altura de tu silla: tus pies deben apoyar completamente en el piso y tener espacio libre para las piernas."
     );
   }
 
@@ -575,7 +578,7 @@ function generateRecommendations(
     assessment.chair.depthNotAdjustable
   ) {
     recommendations.push(
-      "Revisar la profundidad del asiento y mantener aproximadamente 8 cm entre el asiento y la parte posterior de las rodillas."
+      "Revisa la profundidad del asiento: deja unos 8 cm entre el borde y la parte de atrás de tus rodillas."
     );
   }
 
@@ -586,7 +589,7 @@ function generateRecommendations(
     assessment.chair.armrestNotAdjustable
   ) {
     recommendations.push(
-      "Ajustar los reposabrazos para mantener los codos apoyados y los hombros relajados."
+      "Regula los reposabrazos para que tus codos descansen con los hombros relajados."
     );
   }
 
@@ -596,7 +599,7 @@ function generateRecommendations(
     assessment.chair.backrestNotAdjustable
   ) {
     recommendations.push(
-      "Ajustar el respaldo y procurar un apoyo lumbar adecuado."
+      "Ajusta el respaldo para que tu zona lumbar quede bien apoyada."
     );
   }
 
@@ -606,7 +609,7 @@ function generateRecommendations(
     assessment.monitor.tooFar
   ) {
     recommendations.push(
-      "Ajustar la pantalla para mantener una distancia aproximada de 45–75 cm y evitar flexión, extensión o rotación innecesaria del cuello."
+      "Ubica la pantalla a una distancia de 45–75 cm y a la altura de tus ojos, para no forzar el cuello."
     );
   }
 
@@ -614,7 +617,7 @@ function generateRecommendations(
     assessment.monitor.glare
   ) {
     recommendations.push(
-      "Eliminar o reducir los brillos y reflejos sobre la pantalla."
+      "Reduce los reflejos de la pantalla: reubícala o ajusta la iluminación del espacio."
     );
   }
 
@@ -622,7 +625,7 @@ function generateRecommendations(
     assessment.phone.betweenNeckAndShoulder
   ) {
     recommendations.push(
-      "Evitar sujetar el teléfono entre el cuello y el hombro; utilizar manos libres o auriculares."
+      "Evita sostener el teléfono entre el cuello y el hombro — prueba con manos libres o auriculares."
     );
   }
 
@@ -633,7 +636,7 @@ function generateRecommendations(
     assessment.mouse.hardWristRest
   ) {
     recommendations.push(
-      "Ubicar el mouse próximo al cuerpo y alineado con el hombro, manteniendo una posición cómoda de la mano."
+      "Acerca el mouse a tu cuerpo, alineado con el hombro, para que tu mano quede en una posición cómoda."
     );
   }
 
@@ -644,7 +647,7 @@ function generateRecommendations(
     assessment.keyboard.notAdjustable
   ) {
     recommendations.push(
-      "Ajustar el teclado para favorecer muñecas rectas y hombros relajados."
+      "Ajusta el teclado para mantener las muñecas rectas y los hombros relajados al escribir."
     );
   }
 
@@ -652,7 +655,7 @@ function generateRecommendations(
     scores.final >= 5
   ) {
     recommendations.push(
-      "Priorizar la intervención ergonómica debido al nivel de riesgo obtenido."
+      "Con los ajustes de arriba puedes mejorar bastante tu comodidad — vale la pena priorizarlos esta semana."
     );
   }
 
@@ -660,7 +663,7 @@ function generateRecommendations(
     recommendations.length === 0
   ) {
     recommendations.push(
-      "Mantener las condiciones actuales y continuar con seguimiento ergonómico periódico."
+      "¡Buen trabajo! Tu puesto de trabajo está bien configurado. Sigue así y revisa tu postura de vez en cuando."
     );
   }
 

@@ -46,12 +46,12 @@ export default function Step4Result() {
         puntajeFinal:     scores.final,
         nivelRiesgo:      action.risk,
         postura:          action.risk,
-        detalles:         JSON.stringify({
-          silla: scores.chair,
-          pantalla: scores.monitorPhone,
-          teclado: scores.keyboardMouse,
-          objetos: detections.map((d) => d.label).join(", "),
-        }),
+        // El servidor arma "Detalles" a partir de estos campos sueltos,
+        // no de un "detalles" ya construido — ver SheetsService.ts.
+        puntajeSilla:      scores.chair,
+        puntajePantalla:   scores.monitorPhone,
+        puntajeTeclado:    scores.keyboardMouse,
+        objetosDetectados: detections.map((d) => d.label),
         recomendaciones:  recommendations.join(" | "),
         // ángulos de postura si están disponibles en rosaResult
         neck:   (rosaResult as { angles?: { neck?: number } }).angles?.neck,

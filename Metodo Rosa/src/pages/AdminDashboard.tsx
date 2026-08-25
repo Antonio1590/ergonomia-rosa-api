@@ -1,33 +1,60 @@
-import { useEffect, useState } from "react";
-import { getAllEvaluations, getAllUsers } from "../services/SheetsService";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { getAllEvaluations, getAllUsers, parseDetalles } from "../services/SheetsService";
 import type { EvaluationRecord, AppUser } from "../services/SheetsService";
 import { useAuth } from "../context/useAuth";
 
-const HERO_IMG =
-  "https://lh3.googleusercontent.com/aida-public/AB6AXuByJtTqKg9SFMqcyHasdmfw6doLesbtyANLvXfD648XyYw57bJEwRwzxSt508qmP0BXNb0MN4iUgglERzio9cRDlGFw8odpA0ZBE9JMD5oUskBQuzdNK0rsk7F9LM9z1dZi-dpbX-TN4QLGhJcLYNSf24r89ScOg4c7xfSl3NjJfoj9WDoxuEyrUuQYWQWQQJhmPHFDol_2Y3U9Uc3wipSI29MLw5RjhlQLWT1tU5i7sNYMjNWVPuPttT84LnRweAcz427dbypJO2Y";
+type View = "resumen" | "evaluaciones" | "usuarios" | "reportes";
+type ChartView = "mensual" | "trimestral";
+type SortKey = "fecha" | "puntajeFinal";
 
-type Tab = "evaluaciones" | "usuarios";
-
-const RISK_CONFIG: Record<string, { badge: string; dot: string }> = {
-  Bajo:       { badge: "bg-green-50 text-green-700 border border-green-200",   dot: "bg-green-500" },
-  Medio:      { badge: "bg-yellow-50 text-yellow-700 border border-yellow-200", dot: "bg-yellow-500" },
-  Alto:       { badge: "bg-red-50 text-red-700 border border-red-200",          dot: "bg-red-500" },
-  "Muy Alto": { badge: "bg-red-100 text-red-900 border border-red-400 font-bold", dot: "bg-red-700" },
+// Mismos colores que AppsScript/JS_Rosa.html (nivelRiesgo) y los ya usados
+// en AutoEvaluationPage.tsx — una sola paleta de riesgo en todo el sistema.
+const RISK_CONFIG: Record<string, { badge: string; dot: string; hex: string }> = {
+  Bajo:       { badge: "bg-green-50 text-green-700 border border-green-200",     dot: "bg-green-500", hex: "#059669" },
+  Medio:      { badge: "bg-yellow-50 text-yellow-700 border border-yellow-200",  dot: "bg-yellow-500", hex: "#CA8A04" },
+  Alto:       { badge: "bg-red-50 text-red-700 border border-red-200",          dot: "bg-red-500",    hex: "#F43F5E" },
+  "Muy Alto": { badge: "bg-red-100 text-red-900 border border-red-400 font-bold", dot: "bg-red-700",   hex: "#9F1239" },
 };
+// Filas guardadas antes de la unificación de escala (ver docs/CHANGELOG.md)
+// pueden traer etiquetas antiguas (p. ej. "Mejorable") — no deben romper
+// el render, solo mostrarse en gris neutro.
+const RISK_FALLBACK = { badge: "bg-gray-100 text-gray-600 border border-gray-200", dot: "bg-gray-400", hex: "#6B7280" };
+const riskCfg = (nivel: string) => RISK_CONFIG[nivel] ?? RISK_FALLBACK;
 
-function scoreColor(s: number) {
-  if (s <= 4) return "text-[#005224]";
-  if (s <= 5) return "text-orange-600";
-  return "text-red-600";
+function csvEscape(v: unknown): string {
+  const s = String(v ?? "");
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+function downloadCSV(filename: string, rows: (string | number)[][]) {
+  const csv = rows.map((r) => r.map(csvEscape).join(",")).join("\n");
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 export default function AdminDashboard() {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [evaluations, setEvaluations] = useState<EvaluationRecord[]>([]);
   const [users, setUsers]             = useState<AppUser[]>([]);
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState<string | null>(null);
-  const [tab, setTab]                 = useState<Tab>("evaluaciones");
+
+  const [view, setView]           = useState<View>("resumen");
+  const [chartView, setChartView] = useState<ChartView>("mensual");
+
+  const [evalQuery, setEvalQuery] = useState("");
+  const [evalRisk, setEvalRisk]   = useState("todos");
+  const [evalSort, setEvalSort]   = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "fecha", dir: "desc" });
+
+  const [userQuery, setUserQuery] = useState("");
+  const [userRole, setUserRole]   = useState("todos");
 
   useEffect(() => {
     Promise.all([getAllEvaluations(), getAllUsers()])
@@ -36,15 +63,115 @@ export default function AdminDashboard() {
       .finally(() => setLoading(false));
   }, []);
 
+  function goTo(v: View) {
+    setView(v);
+    document.getElementById("panel-content")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  /* ── KPIs (siempre sobre el total, no sobre el filtro) ── */
   const avgScore  = evaluations.length > 0
     ? evaluations.reduce((s, e) => s + e.puntajeFinal, 0) / evaluations.length : 0;
   const highRisk  = evaluations.filter((e) => e.puntajeFinal >= 5).length;
-  const lastScore = evaluations.length > 0 ? evaluations[evaluations.length - 1].puntajeFinal : null;
-  const lastRisk  = evaluations.length > 0 ? evaluations[evaluations.length - 1].nivelRiesgo : "—";
+  const lastEval  = evaluations.length > 0 ? evaluations[evaluations.length - 1] : null;
 
-  /* bar chart — últimas 6 evaluaciones */
-  const chartData = evaluations.slice(-6);
-  const chartMax  = Math.max(...chartData.map((e) => e.puntajeFinal), 1);
+  /* ── Historial: mensual (últimas evaluaciones) o trimestral (promedio por mes) ── */
+  const chartData = useMemo(() => {
+    if (chartView === "mensual") {
+      return evaluations.slice(-6).map((e) => ({
+        valor: e.puntajeFinal,
+        color: riskCfg(e.nivelRiesgo).hex,
+        etiqueta: new Date(e.fecha).toLocaleDateString("es-CO", { month: "short", day: "numeric" }),
+      }));
+    }
+    const meses = new Map<string, { suma: number; n: number; fecha: Date }>();
+    evaluations.forEach((e) => {
+      const d = new Date(e.fecha);
+      if (Number.isNaN(d.getTime())) return;
+      const k = `${d.getFullYear()}-${d.getMonth()}`;
+      const cur = meses.get(k) ?? { suma: 0, n: 0, fecha: d };
+      cur.suma += e.puntajeFinal;
+      cur.n += 1;
+      meses.set(k, cur);
+    });
+    return Array.from(meses.values())
+      .sort((a, b) => a.fecha.getTime() - b.fecha.getTime())
+      .slice(-6)
+      .map((m) => {
+        const prom = Math.round((m.suma / m.n) * 10) / 10;
+        return {
+          valor: prom,
+          color: prom <= 2 ? RISK_CONFIG.Bajo.hex : prom <= 4 ? RISK_CONFIG.Medio.hex : prom <= 7 ? RISK_CONFIG.Alto.hex : RISK_CONFIG["Muy Alto"].hex,
+          etiqueta: m.fecha.toLocaleDateString("es-CO", { month: "short", year: "2-digit" }),
+        };
+      });
+  }, [evaluations, chartView]);
+  const chartMax = Math.max(...chartData.map((d) => d.valor), 1);
+
+  /* ── Filtros reales de evaluaciones ── */
+  const riskOptions = useMemo(
+    () => Array.from(new Set(evaluations.map((e) => e.nivelRiesgo).filter(Boolean))).sort(),
+    [evaluations]
+  );
+
+  const filteredEvaluations = useMemo(() => {
+    const q = evalQuery.trim().toLowerCase();
+    const list = evaluations.filter((e) => {
+      const matchQ = !q
+        || (e.nombre || "").toLowerCase().includes(q)
+        || (e.email || "").toLowerCase().includes(q)
+        || (e.cedula || "").toLowerCase().includes(q);
+      const matchRisk = evalRisk === "todos" || e.nivelRiesgo === evalRisk;
+      return matchQ && matchRisk;
+    });
+    const dir = evalSort.dir === "asc" ? 1 : -1;
+    return [...list].sort((a, b) => evalSort.key === "fecha"
+      ? (new Date(a.fecha).getTime() - new Date(b.fecha).getTime()) * dir
+      : (a.puntajeFinal - b.puntajeFinal) * dir);
+  }, [evaluations, evalQuery, evalRisk, evalSort]);
+
+  function toggleSort(key: SortKey) {
+    setEvalSort((s) => s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "desc" });
+  }
+
+  /* ── Filtros reales de usuarios ── */
+  const filteredUsers = useMemo(() => {
+    const q = userQuery.trim().toLowerCase();
+    return users.filter((u) => {
+      const matchQ = !q
+        || (u.nombre || "").toLowerCase().includes(q)
+        || (u.email || "").toLowerCase().includes(q)
+        || (u.cedula || "").toLowerCase().includes(q);
+      const matchRole = userRole === "todos" || u.rol === userRole;
+      return matchQ && matchRole;
+    });
+  }, [users, userQuery, userRole]);
+
+  function exportEvaluacionesCSV() {
+    downloadCSV(`rosa-evaluaciones-${Date.now()}.csv`, [
+      ["Fecha", "Nombre", "Cédula", "Email", "Puntaje", "Nivel de riesgo", "Objetos detectados"],
+      ...filteredEvaluations.map((e) => {
+        const objetos = parseDetalles(e.detalles).objetos;
+        const objetosTxt = Array.isArray(objetos) ? objetos.join(" | ") : (objetos || "");
+        return [new Date(e.fecha).toLocaleDateString("es-CO"), e.nombre || "", e.cedula || "", e.email, e.puntajeFinal, e.nivelRiesgo, objetosTxt];
+      }),
+    ]);
+  }
+
+  function exportUsuariosCSV() {
+    downloadCSV(`rosa-usuarios-${Date.now()}.csv`, [
+      ["Nombre", "Cédula", "Email", "Rol", "Fecha registro"],
+      ...filteredUsers.map((u) => [u.nombre, u.cedula, u.email, u.rol, u.fechaRegistro || ""]),
+    ]);
+  }
+
+  const NAV_ITEMS: { icon: string; label: string; view: View }[] = [
+    { icon: "dashboard",  label: "Resumen general", view: "resumen" },
+    { icon: "bar_chart",  label: "Evaluaciones",    view: "evaluaciones" },
+    { icon: "group",      label: "Usuarios",        view: "usuarios" },
+    { icon: "analytics",  label: "Reportes",        view: "reportes" },
+  ];
+
+  const tableView: "evaluaciones" | "usuarios" = view === "usuarios" ? "usuarios" : "evaluaciones";
 
   return (
     <div className="min-h-screen bg-[#f8f9ff] text-[#0b1c30]">
@@ -54,17 +181,17 @@ export default function AdminDashboard() {
         <div className="flex justify-between items-center w-full px-6 lg:px-10 max-w-[1280px] mx-auto">
           <span className="text-xl font-bold text-[#005224]">ROSA Expert</span>
           <nav className="hidden md:flex items-center gap-8">
-            {["Panel", "Evaluaciones", "Usuarios"].map((n) => (
-              <span key={n} className="text-sm font-semibold text-gray-500 hover:text-[#005224] cursor-pointer transition-colors">{n}</span>
+            {NAV_ITEMS.slice(0, 3).map(({ label, view: v }) => (
+              <button
+                key={label}
+                onClick={() => goTo(v)}
+                className={`text-sm font-semibold transition-colors ${view === v ? "text-[#005224]" : "text-gray-500 hover:text-[#005224]"}`}
+              >
+                {label}
+              </button>
             ))}
           </nav>
           <div className="flex items-center gap-2">
-            <button className="p-2 rounded-full hover:bg-gray-100 transition">
-              <span className="material-symbols-outlined text-gray-500">notifications</span>
-            </button>
-            <button className="p-2 rounded-full hover:bg-gray-100 transition">
-              <span className="material-symbols-outlined text-gray-500">help_outline</span>
-            </button>
             <div className="w-8 h-8 rounded-full bg-[#9bf7ac] flex items-center justify-center ml-1">
               <span className="material-symbols-outlined text-[#005224] text-base">account_circle</span>
             </div>
@@ -82,23 +209,24 @@ export default function AdminDashboard() {
             <h2 className="text-lg font-bold text-[#005224]">Panel de Administración</h2>
             <p className="text-xs text-gray-500 mt-1">Seguros Bolívar — ROSA Expert</p>
           </div>
+          {/* Solo "Reportes": Resumen/Evaluaciones/Usuarios ya están en el
+              nav superior (ref NAV_ITEMS.slice(0,3)) y, en pantallas donde
+              ambos son visibles a la vez (lg+), tenerlos duplicados aquí
+              confundía más de lo que ayudaba. */}
           <nav className="flex flex-col gap-1 flex-1">
-            {[
-              { icon: "dashboard",  label: "Resumen general",    active: true  },
-              { icon: "bar_chart",  label: "Evaluaciones",       active: false },
-              { icon: "group",      label: "Usuarios",            active: false },
-              { icon: "analytics",  label: "Reportes",           active: false },
-            ].map(({ icon, label, active }) => (
-              <div key={label}
-                className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer font-semibold text-sm transition
-                  ${active ? "bg-[#006D32] text-white shadow-sm" : "text-gray-600 hover:bg-gray-200"}`}>
+            {NAV_ITEMS.filter(({ view: v }) => v === "reportes").map(({ icon, label, view: v }) => (
+              <button key={label} onClick={() => goTo(v)}
+                className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer font-semibold text-sm transition text-left
+                  ${view === v ? "bg-[#006D32] text-white shadow-sm" : "text-gray-600 hover:bg-gray-200"}`}>
                 <span className="material-symbols-outlined text-lg">{icon}</span>
                 {label}
-              </div>
+              </button>
             ))}
           </nav>
           <div className="mt-auto p-3">
-            <button className="w-full py-2.5 px-4 bg-[#FF6B00] text-white rounded-xl font-semibold text-sm hover:bg-[#E05A00] transition flex items-center justify-center gap-2">
+            <button
+              onClick={() => navigate("/")}
+              className="w-full py-2.5 px-4 bg-[#FF6B00] text-white rounded-xl font-semibold text-sm hover:bg-[#E05A00] transition flex items-center justify-center gap-2">
               <span className="material-symbols-outlined text-base">add</span>
               Nueva evaluación
             </button>
@@ -106,7 +234,7 @@ export default function AdminDashboard() {
         </aside>
 
         {/* ── Main ── */}
-        <main className="flex-1 lg:ml-72 p-6 lg:p-10 space-y-8 max-w-[1280px] mx-auto w-full">
+        <main id="panel-content" className="flex-1 lg:ml-72 p-6 lg:p-10 space-y-8 max-w-[1280px] mx-auto w-full">
 
           {/* Page header */}
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -115,8 +243,16 @@ export default function AdminDashboard() {
               <p className="text-gray-500 mt-1">Monitoreo en tiempo real de evaluaciones ROSA — Seguros Bolívar</p>
             </div>
             <div className="flex items-center gap-1 bg-white border border-gray-200 p-1 rounded-full text-sm">
-              <span className="px-4 py-1.5 bg-[#006D32] text-white rounded-full font-semibold">Vista mensual</span>
-              <span className="px-4 py-1.5 text-gray-500 font-semibold cursor-pointer">Vista trimestral</span>
+              <button
+                onClick={() => setChartView("mensual")}
+                className={`px-4 py-1.5 rounded-full font-semibold transition ${chartView === "mensual" ? "bg-[#006D32] text-white" : "text-gray-500 hover:bg-gray-100"}`}>
+                Vista mensual
+              </button>
+              <button
+                onClick={() => setChartView("trimestral")}
+                className={`px-4 py-1.5 rounded-full font-semibold transition ${chartView === "trimestral" ? "bg-[#006D32] text-white" : "text-gray-500 hover:bg-gray-100"}`}>
+                Vista trimestral
+              </button>
             </div>
           </div>
 
@@ -142,20 +278,20 @@ export default function AdminDashboard() {
                   <div className="text-4xl font-black text-gray-300">—</div>
                 ) : (
                   <>
-                    <div className={`text-[64px] font-black leading-none ${scoreColor(lastScore ?? 0)}`}>
-                      {lastScore ?? "—"}
+                    <div className="text-[64px] font-black leading-none" style={{ color: lastEval ? riskCfg(lastEval.nivelRiesgo).hex : "#9CA3AF" }}>
+                      {lastEval?.puntajeFinal ?? "—"}
                     </div>
-                    <div className={`inline-flex items-center gap-1 mt-3 px-4 py-1.5 rounded-full border text-sm font-bold ${RISK_CONFIG[lastRisk]?.badge ?? "bg-gray-50 text-gray-600 border-gray-200"}`}>
+                    <div className={`inline-flex items-center gap-1 mt-3 px-4 py-1.5 rounded-full border text-sm font-bold ${lastEval ? riskCfg(lastEval.nivelRiesgo).badge : "bg-gray-50 text-gray-600 border-gray-200"}`}>
                       <span className="material-symbols-outlined text-sm">check_circle</span>
-                      {lastRisk}
+                      {lastEval?.nivelRiesgo ?? "Sin datos"}
                     </div>
                   </>
                 )}
               </div>
               <div className="pt-4 border-t border-gray-100">
                 <p className="text-xs text-gray-400">
-                  {evaluations.length > 0
-                    ? `Última evaluación: ${new Date(evaluations[evaluations.length - 1].fecha).toLocaleDateString("es-CO")}`
+                  {lastEval
+                    ? `Última evaluación registrada: ${new Date(lastEval.fecha).toLocaleDateString("es-CO")}`
                     : "Sin evaluaciones aún"}
                 </p>
               </div>
@@ -164,7 +300,9 @@ export default function AdminDashboard() {
             {/* Bar chart */}
             <div className="md:col-span-8 bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
               <div className="flex justify-between items-center mb-6">
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Historial de puntajes</span>
+                <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+                  {chartView === "mensual" ? "Historial de puntajes" : "Promedio mensual (últimos meses)"}
+                </span>
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 rounded-full bg-[#005224]" />
                   <span className="text-xs text-gray-500">Índice ROSA</span>
@@ -176,28 +314,26 @@ export default function AdminDashboard() {
                 <div className="h-40 flex items-center justify-center text-gray-300 text-sm">Sin datos</div>
               ) : (
                 <div className="relative h-40 flex items-end justify-between gap-2 px-2">
-                  {/* grid lines */}
                   <div className="absolute inset-0 flex flex-col justify-between py-1 pointer-events-none">
                     {[0, 1, 2, 3].map((i) => (
                       <div key={i} className="w-full border-b border-gray-100" />
                     ))}
                   </div>
-                  {chartData.map((ev, i) => {
-                    const pct = ev.puntajeFinal / chartMax;
+                  {chartData.map((d, i) => {
+                    const pct = d.valor / chartMax;
                     const isLast = i === chartData.length - 1;
-                    const color = ev.puntajeFinal <= 4 ? "#005224" : ev.puntajeFinal <= 5 ? "#ea580c" : "#dc2626";
                     return (
                       <div key={i} className="relative flex-1 flex flex-col justify-end h-full group">
                         <div
                           className="w-full rounded-t-lg transition-all duration-500 relative"
-                          style={{ height: `${Math.max(pct * 100, 8)}%`, backgroundColor: color, opacity: isLast ? 1 : 0.4, border: isLast ? `2px solid ${color}` : "none" }}
+                          style={{ height: `${Math.max(pct * 100, 8)}%`, backgroundColor: d.color, opacity: isLast ? 1 : 0.4, border: isLast ? `2px solid ${d.color}` : "none" }}
                         >
                           <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[10px] px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap">
-                            {ev.puntajeFinal}
+                            {d.valor}
                           </div>
                         </div>
                         <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[10px] text-gray-400 whitespace-nowrap">
-                          {new Date(ev.fecha).toLocaleDateString("es-CO", { month: "short", day: "numeric" })}
+                          {d.etiqueta}
                         </span>
                       </div>
                     );
@@ -210,10 +346,10 @@ export default function AdminDashboard() {
             {/* KPI tiles */}
             <div className="md:col-span-8 grid grid-cols-2 md:grid-cols-4 gap-4">
               {[
-                { icon: "group",         label: "Usuarios",           value: loading ? "…" : users.length,              color: "#005224" },
-                { icon: "assignment",    label: "Evaluaciones totales", value: loading ? "…" : evaluations.length,       color: "#005224" },
-                { icon: "trending_up",   label: "Puntaje promedio",   value: loading ? "…" : avgScore.toFixed(1),        color: "#ea580c" },
-                { icon: "warning",       label: "Riesgo alto o mayor", value: loading ? "…" : highRisk,                 color: "#dc2626" },
+                { icon: "group",         label: "Usuarios",             value: loading ? "…" : users.length,        color: "#005224" },
+                { icon: "assignment",    label: "Evaluaciones totales", value: loading ? "…" : evaluations.length,  color: "#005224" },
+                { icon: "trending_up",   label: "Puntaje promedio",     value: loading ? "…" : avgScore.toFixed(1), color: "#ea580c" },
+                { icon: "warning",       label: "Riesgo alto o mayor",  value: loading ? "…" : highRisk,            color: "#dc2626" },
               ].map(({ icon, label, value, color }) => (
                 <div key={label} className="bg-white border border-gray-200 rounded-2xl p-5 flex flex-col gap-3 shadow-sm">
                   <div className="w-10 h-10 rounded-xl bg-[#EEF7F2] flex items-center justify-center">
@@ -252,114 +388,219 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          {/* ── Tablas ── */}
+          {/* ── Contenido según sección ── */}
+          {/* El selector de abajo es la única forma de llegar a "Reportes" en
+              pantallas donde el sidebar (lg:flex) o el nav superior (md:flex)
+              están ocultos por el layout responsive — por eso vive fuera del
+              condicional y siempre está visible. */}
           <section>
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="text-xl font-bold text-[#0b1c30]">Datos del sistema</h3>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-5">
+              <h3 className="text-xl font-bold text-[#0b1c30]">
+                {view === "reportes" ? "Reportes" : "Datos del sistema"}
+              </h3>
               <div className="flex gap-1 bg-white border border-gray-200 rounded-xl p-1 text-sm">
-                {(["evaluaciones", "usuarios"] as Tab[]).map((t) => (
+                {([
+                  { v: "evaluaciones" as View, label: "Evaluaciones" },
+                  { v: "usuarios" as View, label: "Usuarios" },
+                  { v: "reportes" as View, label: "Reportes" },
+                ]).map(({ v, label }) => (
                   <button
-                    key={t}
-                    onClick={() => setTab(t)}
-                    className={`px-4 py-1.5 rounded-lg font-semibold transition capitalize
-                      ${tab === t ? "bg-[#006D32] text-white shadow-sm" : "text-gray-500 hover:bg-gray-100"}`}
+                    key={v}
+                    onClick={() => goTo(v)}
+                    className={`px-4 py-1.5 rounded-lg font-semibold transition
+                      ${(view === v || (view === "resumen" && v === "evaluaciones")) ? "bg-[#006D32] text-white shadow-sm" : "text-gray-500 hover:bg-gray-100"}`}
                   >
-                    {t}
+                    {label}
                   </button>
                 ))}
               </div>
             </div>
 
-            <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
-              {loading ? (
-                <div className="p-12 text-center text-gray-400">
-                  <span className="material-symbols-outlined text-4xl animate-spin">refresh</span>
-                  <p className="mt-3 text-sm">Cargando datos...</p>
+            {view === "reportes" ? (
+              <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm flex flex-col gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-[#EEF7F2] flex items-center justify-center">
+                      <span className="material-symbols-outlined text-[#005224]">assignment</span>
+                    </div>
+                    <div>
+                      <p className="font-bold text-sm">Evaluaciones</p>
+                      <p className="text-xs text-gray-400">{filteredEvaluations.length} de {evaluations.length} registros (según el filtro activo)</p>
+                    </div>
+                  </div>
+                  <button onClick={exportEvaluacionesCSV}
+                    className="self-start flex items-center gap-2 px-4 py-2 bg-[#006D32] text-white rounded-xl font-semibold text-sm hover:bg-[#005224] transition">
+                    <span className="material-symbols-outlined text-base">download</span>
+                    Exportar CSV
+                  </button>
                 </div>
-              ) : tab === "evaluaciones" ? (
-                evaluations.length === 0 ? (
-                  <div className="p-12 text-center text-gray-400 text-sm">No hay evaluaciones registradas aún.</div>
+                <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm flex flex-col gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-[#EEF7F2] flex items-center justify-center">
+                      <span className="material-symbols-outlined text-[#005224]">group</span>
+                    </div>
+                    <div>
+                      <p className="font-bold text-sm">Usuarios</p>
+                      <p className="text-xs text-gray-400">{filteredUsers.length} de {users.length} registros (según el filtro activo)</p>
+                    </div>
+                  </div>
+                  <button onClick={exportUsuariosCSV}
+                    className="self-start flex items-center gap-2 px-4 py-2 bg-[#006D32] text-white rounded-xl font-semibold text-sm hover:bg-[#005224] transition">
+                    <span className="material-symbols-outlined text-base">download</span>
+                    Exportar CSV
+                  </button>
+                </div>
+              </div>
+              <p className="text-xs text-gray-400 mt-4">
+                Los reportes exportan lo que esté visible según los filtros de las pestañas "Evaluaciones" y "Usuarios" — ajusta esos filtros antes de exportar si necesitas un subconjunto.
+              </p>
+              </>
+            ) : (
+              <>
+              {/* ── Filtros reales ── */}
+              {tableView === "evaluaciones" ? (
+                <div className="flex flex-col sm:flex-row gap-3 mb-4">
+                  <div className="relative flex-1">
+                    <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">search</span>
+                    <input
+                      value={evalQuery}
+                      onChange={(e) => setEvalQuery(e.target.value)}
+                      placeholder="Buscar por nombre, correo o cédula..."
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#006D32]/30 focus:border-[#006D32]"
+                    />
+                  </div>
+                  <select
+                    value={evalRisk}
+                    onChange={(e) => setEvalRisk(e.target.value)}
+                    className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-600 focus:outline-none focus:ring-2 focus:ring-[#006D32]/30"
+                  >
+                    <option value="todos">Todos los niveles</option>
+                    {riskOptions.map((r) => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                </div>
+              ) : (
+                <div className="flex flex-col sm:flex-row gap-3 mb-4">
+                  <div className="relative flex-1">
+                    <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">search</span>
+                    <input
+                      value={userQuery}
+                      onChange={(e) => setUserQuery(e.target.value)}
+                      placeholder="Buscar por nombre, correo o cédula..."
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#006D32]/30 focus:border-[#006D32]"
+                    />
+                  </div>
+                  <select
+                    value={userRole}
+                    onChange={(e) => setUserRole(e.target.value)}
+                    className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-600 focus:outline-none focus:ring-2 focus:ring-[#006D32]/30"
+                  >
+                    <option value="todos">Todos los roles</option>
+                    <option value="user">Colaborador</option>
+                    <option value="admin">Administrador</option>
+                  </select>
+                </div>
+              )}
+
+              <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+                {loading ? (
+                  <div className="p-12 text-center text-gray-400">
+                    <span className="material-symbols-outlined text-4xl animate-spin">refresh</span>
+                    <p className="mt-3 text-sm">Cargando datos...</p>
+                  </div>
+                ) : tableView === "evaluaciones" ? (
+                  filteredEvaluations.length === 0 ? (
+                    <div className="p-12 text-center text-gray-400 text-sm">
+                      {evaluations.length === 0 ? "No hay evaluaciones registradas aún." : "Ningún resultado coincide con el filtro."}
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-[#eff4ff] border-b border-gray-200">
+                            <th onClick={() => toggleSort("fecha")} className="px-5 py-3 text-xs font-bold text-gray-500 uppercase tracking-wide cursor-pointer select-none hover:text-[#005224]">
+                              Fecha {evalSort.key === "fecha" && (evalSort.dir === "asc" ? "↑" : "↓")}
+                            </th>
+                            <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase tracking-wide">Nombre</th>
+                            <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase tracking-wide">Cédula</th>
+                            <th onClick={() => toggleSort("puntajeFinal")} className="px-5 py-3 text-xs font-bold text-gray-500 uppercase tracking-wide cursor-pointer select-none hover:text-[#005224]">
+                              Puntaje {evalSort.key === "puntajeFinal" && (evalSort.dir === "asc" ? "↑" : "↓")}
+                            </th>
+                            <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase tracking-wide">Nivel de riesgo</th>
+                            <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase tracking-wide">Objetos detectados</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {filteredEvaluations.map((ev, i) => {
+                            const cfg = riskCfg(ev.nivelRiesgo);
+                            const objetos = parseDetalles(ev.detalles).objetos;
+                            const objetosTxt = Array.isArray(objetos) ? objetos.join(", ") : (objetos || "");
+                            return (
+                              <tr key={i} className="hover:bg-[#f8f9ff] transition">
+                                <td className="px-5 py-4 text-sm text-gray-500">
+                                  {new Date(ev.fecha).toLocaleDateString("es-CO")}
+                                </td>
+                                <td className="px-5 py-4 font-semibold text-sm text-gray-900">{ev.nombre || "—"}</td>
+                                <td className="px-5 py-4 text-sm text-gray-500">{ev.cedula || "—"}</td>
+                                <td className="px-5 py-4">
+                                  <span className="text-lg font-black" style={{ color: cfg.hex }}>{ev.puntajeFinal}</span>
+                                </td>
+                                <td className="px-5 py-4">
+                                  <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${cfg.badge}`}>
+                                    <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+                                    {ev.nivelRiesgo}
+                                  </span>
+                                </td>
+                                <td className="px-5 py-4 text-xs text-gray-400 max-w-[220px] truncate" title={objetosTxt || undefined}>{objetosTxt || "—"}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="bg-[#eff4ff] border-b border-gray-200">
-                          {["Fecha", "Nombre", "Cédula", "Puntaje", "Nivel de riesgo", "Objetos detectados"].map((h) => (
-                            <th key={h} className="px-5 py-3 text-xs font-bold text-gray-500 uppercase tracking-wide">{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {evaluations.map((ev, i) => {
-                          const cfg = RISK_CONFIG[ev.nivelRiesgo];
-                          return (
+                  filteredUsers.length === 0 ? (
+                    <div className="p-12 text-center text-gray-400 text-sm">
+                      {users.length === 0 ? "No hay usuarios registrados aún." : "Ningún resultado coincide con el filtro."}
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-[#eff4ff] border-b border-gray-200">
+                            {["Nombre", "Cédula", "Email", "Rol", "Fecha registro"].map((h) => (
+                              <th key={h} className="px-5 py-3 text-xs font-bold text-gray-500 uppercase tracking-wide">{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {filteredUsers.map((u, i) => (
                             <tr key={i} className="hover:bg-[#f8f9ff] transition">
-                              <td className="px-5 py-4 text-sm text-gray-500">
-                                {new Date(ev.fecha).toLocaleDateString("es-CO")}
-                              </td>
-                              <td className="px-5 py-4 font-semibold text-sm text-gray-900">{ev.nombre || "—"}</td>
-                              <td className="px-5 py-4 text-sm text-gray-500">{ev.cedula || "—"}</td>
+                              <td className="px-5 py-4 font-semibold text-sm text-gray-900">{u.nombre}</td>
+                              <td className="px-5 py-4 text-sm text-gray-500">{u.cedula}</td>
+                              <td className="px-5 py-4 text-sm text-gray-500">{u.email}</td>
                               <td className="px-5 py-4">
-                                <span className={`text-lg font-black ${scoreColor(ev.puntajeFinal)}`}>{ev.puntajeFinal}</span>
-                              </td>
-                              <td className="px-5 py-4">
-                                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${cfg?.badge ?? "bg-gray-100 text-gray-700"}`}>
-                                  <span className={`w-1.5 h-1.5 rounded-full ${cfg?.dot ?? "bg-gray-400"}`} />
-                                  {ev.nivelRiesgo}
+                                <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold border
+                                  ${u.rol === "admin"
+                                    ? "bg-purple-50 text-purple-700 border-purple-200"
+                                    : "bg-blue-50 text-blue-700 border-blue-200"}`}>
+                                  {u.rol}
                                 </span>
                               </td>
-                              <td className="px-5 py-4 text-xs text-gray-400">{ev.objetosDetectados || "—"}</td>
+                              <td className="px-5 py-4 text-sm text-gray-500">
+                                {u.fechaRegistro ? new Date(u.fechaRegistro).toLocaleDateString("es-CO") : "—"}
+                              </td>
                             </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )
-              ) : (
-                users.length === 0 ? (
-                  <div className="p-12 text-center text-gray-400 text-sm">No hay usuarios registrados aún.</div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="bg-[#eff4ff] border-b border-gray-200">
-                          {["Nombre", "Cédula", "Email", "Rol", "Fecha registro", "Estado"].map((h) => (
-                            <th key={h} className="px-5 py-3 text-xs font-bold text-gray-500 uppercase tracking-wide">{h}</th>
                           ))}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {users.map((u, i) => (
-                          <tr key={i} className="hover:bg-[#f8f9ff] transition">
-                            <td className="px-5 py-4 font-semibold text-sm text-gray-900">{u.nombre}</td>
-                            <td className="px-5 py-4 text-sm text-gray-500">{u.cedula}</td>
-                            <td className="px-5 py-4 text-sm text-gray-500">{u.email}</td>
-                            <td className="px-5 py-4">
-                              <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold border
-                                ${u.rol === "admin"
-                                  ? "bg-purple-50 text-purple-700 border-purple-200"
-                                  : "bg-blue-50 text-blue-700 border-blue-200"}`}>
-                                {u.rol}
-                              </span>
-                            </td>
-                            <td className="px-5 py-4 text-sm text-gray-500">
-                              {u.fechaRegistro ? new Date(u.fechaRegistro).toLocaleDateString("es-CO") : "—"}
-                            </td>
-                            <td className="px-5 py-4">
-                              <span className="inline-flex items-center gap-1.5 text-xs text-green-700">
-                                <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                                Activo
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )
-              )}
-            </div>
+                        </tbody>
+                      </table>
+                    </div>
+                  )
+                )}
+              </div>
+              </>
+            )}
           </section>
 
           {/* ── Hero section ── */}
@@ -370,16 +611,20 @@ export default function AdminDashboard() {
                 La metodología ROSA permite identificar estresores ergonómicos específicos antes de que se conviertan en trastornos musculoesqueléticos crónicos. El monitoreo continuo es el primer paso hacia la salud física a largo plazo.
               </p>
               <div className="flex gap-3">
-                <button className="px-5 py-2.5 bg-[#9bf7ac] text-[#00210b] font-bold rounded-xl text-sm hover:scale-105 transition-transform">
+                <button
+                  onClick={() => navigate("/")}
+                  className="px-5 py-2.5 bg-[#9bf7ac] text-[#00210b] font-bold rounded-xl text-sm hover:scale-105 transition-transform">
                   Nueva evaluación
                 </button>
-                <button className="px-5 py-2.5 border border-white/40 text-white font-bold rounded-xl text-sm hover:bg-white/10 transition">
-                  Documentación
+                <button
+                  onClick={() => goTo("evaluaciones")}
+                  className="px-5 py-2.5 border border-white/40 text-white font-bold rounded-xl text-sm hover:bg-white/10 transition">
+                  Ver evaluaciones
                 </button>
               </div>
             </div>
-            <div className="relative h-56 md:h-64 rounded-2xl overflow-hidden shadow-2xl">
-              <img src={HERO_IMG} alt="Puesto ergonómico" className="absolute inset-0 w-full h-full object-cover" />
+            <div className="relative h-56 md:h-64 rounded-2xl overflow-hidden shadow-2xl bg-white/10 flex items-center justify-center">
+              <span className="material-symbols-outlined text-white/30 text-[120px]">clinical_notes</span>
             </div>
           </section>
 
@@ -391,12 +636,7 @@ export default function AdminDashboard() {
         <div className="max-w-[1280px] mx-auto py-10 px-6 lg:px-10 flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="text-center md:text-left">
             <div className="text-lg font-bold text-[#005224] mb-1">ROSA Expert</div>
-            <p className="text-sm text-gray-500">© 2024 Sistema Ergonómico ROSA — Seguros Bolívar</p>
-          </div>
-          <div className="flex flex-wrap justify-center gap-6 text-sm text-gray-500">
-            {["Política de privacidad", "Documentación", "Contactar especialista", "Términos de uso"].map((l) => (
-              <a key={l} href="#" className="hover:text-[#FF6B00] transition">{l}</a>
-            ))}
+            <p className="text-sm text-gray-500">© 2026 Sistema Ergonómico ROSA — Seguros Bolívar</p>
           </div>
         </div>
       </footer>
