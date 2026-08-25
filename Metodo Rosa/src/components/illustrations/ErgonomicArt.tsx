@@ -48,10 +48,12 @@ export function SeatedPostureArt({
   zones,
   className = "",
   showLabels = false,
+  style,
 }: {
   zones?: PostureZones;
   className?: string;
   showLabels?: boolean;
+  style?: React.CSSProperties;
 }) {
   const z = { ...DEFAULT_ZONES, ...zones };
   const c = (k: keyof typeof z) => ZONE_COLORS[z[k]];
@@ -61,6 +63,7 @@ export function SeatedPostureArt({
     <svg
       viewBox="0 0 400 340"
       className={className}
+      style={style}
       role="img"
       aria-label="Vista lateral de una persona sentada en su puesto de trabajo, con las zonas coloreadas según su estado ergonómico"
     >
