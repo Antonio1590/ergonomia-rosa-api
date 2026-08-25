@@ -126,10 +126,15 @@ módulo no encontrado.
   que **no es alcanzable desde ningún router** — `App.tsx` solo define
   `/login`, `/admin` y `/*` → `AutoEvaluationPage.tsx`, que reimplementa todo
   el flujo de forma autocontenida. Aproximadamente la mitad de `src/` es
-  código muerto. Ver el mapa completo en el reporte del agente (§11) —
-  resumen de archivos vacíos (0 bytes): `src/pages/Home.tsx`,
+  código muerto. Ver el mapa completo en el reporte del agente (§11).
+  Los 5 archivos que estaban en 0 bytes (`src/pages/Home.tsx`,
   `src/pages/Dashboard.tsx`, `src/components/layout/MainLayout.tsx`,
-  `src/components/layout/Footer.tsx`, `src/ai/mediapipe/ImageProcessor.ts`.
+  `src/components/layout/Footer.tsx`, `src/ai/mediapipe/ImageProcessor.ts`)
+  se eliminaron el 2026-08-24 — sin contenido ni referencias, cero riesgo
+  (ver `docs/CHANGELOG.md`). El resto del árbol muerto (contexts, `steps/`,
+  `dashboard/`, `evaluation/`, `score/`, `camera/`, `layout/Navbar.tsx`,
+  `Sidebar.tsx`, la copia divergente de mediapipe, etc.) sigue sin decisión
+  del usuario.
 - **Duplicación divergente de MediaPipe**: `src/ai/mediapipe/*` (vivo) y
   `src/components/ai/mediapipe/*` (muerto) son dos implementaciones de la
   misma lógica de pose que **ya divergieron** — por ejemplo el

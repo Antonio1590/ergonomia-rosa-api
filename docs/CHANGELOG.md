@@ -2,6 +2,20 @@
 
 Registro de cambios importantes. Formato: fecha, qué cambió, por qué.
 
+## 2026-08-24 (continuación 3) — Limpieza de archivos vacíos
+
+Eliminados los 5 archivos que estaban en 0 bytes desde su creación
+(`src/pages/Home.tsx`, `src/pages/Dashboard.tsx`,
+`src/components/layout/MainLayout.tsx`, `src/components/layout/Footer.tsx`,
+`src/ai/mediapipe/ImageProcessor.ts`) — confirmado sin contenido y sin
+ninguna referencia en el resto de `src/` antes de borrar. `npm run build`
+sigue transformando los mismos 46 módulos que antes (nunca formaron parte
+del grafo de la app) y `npm run lint` sigue en los mismos 12 errores
+preexistentes. Alcance acotado a propósito: el resto del árbol de código
+muerto identificado en `docs/AUDIT.md` (el wizard por pasos completo y
+sus contexts, la copia divergente de mediapipe, etc.) sigue sin tocarse —
+es un cambio mucho más grande que requiere su propia decisión.
+
 ## 2026-08-24 (continuación 2) — Verificación exhaustiva del panel + fix de crash
 
 ### Bug corregido: el panel podía crashear si el servidor devolvía datos inesperados
