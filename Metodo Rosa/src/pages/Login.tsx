@@ -78,7 +78,7 @@ export default function Login() {
                 Bienvenido<br />de nuevo
               </h1>
               <p className="mt-4 text-white/60 text-sm lg:text-base max-w-xs">
-                Evaluación ergonómica con IA, pensada para ayudarte — no para exponerte.
+                Evaluación ergonómica con IA, pensada para ayudarte.
               </p>
             </div>
 
@@ -120,7 +120,8 @@ export default function Login() {
                     value={cedula}
                     onChange={(e) => setCedula(e.target.value.replace(/\D/g, ""))}
                     placeholder="Ej: 1023456789"
-                    className="w-full bg-transparent border-0 border-b border-white/25 pb-2.5 text-white placeholder-white/35 focus:outline-none focus:border-[#9bf7ac] transition-colors"
+                    className="w-full appearance-none bg-transparent border-0 border-b border-white/25 rounded-none pb-2.5 text-white placeholder-white/35 outline-none focus:outline-none focus:ring-0 focus:border-[#9bf7ac] transition-colors"
+                    style={{ boxShadow: "none" }}
                     required
                   />
                 </div>
@@ -134,7 +135,8 @@ export default function Login() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="nombre@segurosbolivar.com"
-                    className="w-full bg-transparent border-0 border-b border-white/25 pb-2.5 text-white placeholder-white/35 focus:outline-none focus:border-[#9bf7ac] transition-colors"
+                    className="w-full appearance-none bg-transparent border-0 border-b border-white/25 rounded-none pb-2.5 text-white placeholder-white/35 outline-none focus:outline-none focus:ring-0 focus:border-[#9bf7ac] transition-colors"
+                    style={{ boxShadow: "none" }}
                     required
                   />
                 </div>
