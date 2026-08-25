@@ -4,6 +4,7 @@ import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
 
 import { useAuth } from "./context/useAuth";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
+import { LoadingSpinner } from "./components/common/LoadingSpinner";
 import Login from "./pages/Login";
 import AdminDashboard from "./pages/AdminDashboard";
 import AutoEvaluationPage from "./pages/AutoEvaluationPage";
@@ -19,7 +20,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#EEF4FF]">
-        <p className="text-gray-500 font-semibold">Cargando...</p>
+        <LoadingSpinner label="Cargando..." />
       </div>
     );
   }

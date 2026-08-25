@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { getAllEvaluations, getAllUsers, parseDetalles } from "../services/SheetsService";
 import type { EvaluationRecord, AppUser } from "../services/SheetsService";
 import { useAuth } from "../context/useAuth";
+import { LoadingSpinner } from "../components/common/LoadingSpinner";
 
 type View = "resumen" | "evaluaciones" | "usuarios" | "reportes";
 type ChartView = "mensual" | "trimestral";
@@ -511,9 +512,8 @@ export default function AdminDashboard() {
 
               <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
                 {loading ? (
-                  <div className="p-12 text-center text-gray-400">
-                    <span className="material-symbols-outlined text-4xl animate-spin">refresh</span>
-                    <p className="mt-3 text-sm">Cargando datos...</p>
+                  <div className="p-12 text-center">
+                    <LoadingSpinner size={72} label="Cargando datos..." />
                   </div>
                 ) : tableView === "evaluaciones" ? (
                   filteredEvaluations.length === 0 ? (

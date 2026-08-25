@@ -12,3 +12,8 @@ body{
   font-family:"Public Sans",sans-serif;
   background:#f8f9ff;
 }
+
+@keyframes rosa-loading-pulse {
+  0%, 100% { opacity: 0.25; transform: scale(0.65); }
+  50% { opacity: 1; transform: scale(1); }
+}

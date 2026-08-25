@@ -14,6 +14,7 @@ import type { DetectionStatus } from "../components/DetectionOverlay";
 import { SeatedPostureArt, DeskTopArt } from "../components/illustrations/ErgonomicArt";
 import type { ZoneStatus, PostureZones, DeskItems } from "../components/illustrations/ErgonomicArt";
 import GuidePhoto from "../components/GuidePhoto";
+import { LoadingSpinner } from "../components/common/LoadingSpinner";
 
 /* ─── Tipos ─── */
 type Phase = "guide" | "upload" | "analyzing" | "results";
@@ -808,9 +809,8 @@ export default function AutoEvaluationPage() {
       <div className="min-h-screen bg-[#F0F7F2] flex items-center justify-center px-4">
         <div className="text-center max-w-sm w-full">
           <div className="relative w-32 h-32 mx-auto mb-8">
-            <div className="absolute inset-0 rounded-full border-4 border-[#006D32]/20" />
-            <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-[#006D32] animate-spin" />
-            <div className="absolute inset-0 flex items-center justify-center">
+            <LoadingSpinner size={128} />
+            <div className="absolute inset-0 flex items-center justify-center pt-2">
               <span className="material-symbols-outlined text-[#006D32] text-3xl">
                 {ANALYZING_STEPS[analysisStep]?.icon}
               </span>
