@@ -2,6 +2,78 @@
 
 Registro de cambios importantes. Formato: fecha, qué cambió, por qué.
 
+## 2026-09-02 — Rediseño visual: ingreso y panel admin (paridad con React)
+
+React ya tenía una pantalla de ingreso y un panel admin más elaborados
+(`Login.tsx`, `AdminDashboard.tsx`) que la SPA de Apps Script, que se
+quedó con las tarjetas simples de las primeras fases. Se llevó ese
+mismo lenguaje visual a Apps Script, adaptado a su paleta verde propia
+(no se copió el azul de React — se mantiene consistencia con el resto
+de la SPA).
+
+- **`Page_Login.html`** — tarjeta partida en dos columnas: panel
+  izquierdo con degradado verde oscuro, formas difuminadas de fondo,
+  una ilustración simple en SVG de un puesto de trabajo, titular
+  "Bienvenido de nuevo" e íconos de confianza (análisis local, uso
+  confidencial, acceso controlado); panel derecho con el formulario
+  (inputs de solo subrayado, sin caja) y botón naranja "Ingresar". Los
+  ids que usa `JS_Guide.handleLogin()` (`loginEmail`, `loginCedula`,
+  `loginError`, `btnLogin`, `loginForm`) no cambiaron.
+- **`Page_Dashboard.html` / `JS_Dashboard.html`** — el resumen superior
+  pasa de 3 tarjetas sueltas a una cuadrícula tipo "bento": tarjeta de
+  último puntaje, la gráfica de tendencia (reubicada, mismo `Charts.linea`),
+  4 tiles de KPI con ícono (Usuarios, Evaluaciones totales, Puntaje
+  promedio, Riesgo alto o mayor) y una tarjeta "Salud del sistema" con
+  dos barras de progreso. `Dashboard.load()` ahora pide `Api.getUsers()`
+  en paralelo con `Api.getEvaluations()` (antes no se usaba en el panel)
+  para poder mostrar el total de usuarios y la cobertura.
+
+Estilos nuevos (`.login-*`, `.bento-*`, `.health-*`) agregados a
+`CSS_Components.html`, reutilizando los tokens de color/radio/sombra
+existentes. Verificado visualmente armando una vista previa estática
+local (`CSS_Base` + `CSS_Components` + la página) en escritorio y en
+375px de ancho — ambas pantallas responsive sin overflow horizontal,
+sin errores de consola. No se pudo verificar contra el despliegue real
+de script.google.com por la misma razón de siempre (desactualizado
+respecto al repo).
+
+## 2026-09-01 — Paridad Apps Script: borrador, detalle admin y alerta de riesgo
+
+Las tres mejoras del 2026-08-25 que solo se habían construido en React
+(punto 1, historial, ya existía en ambos lados) ahora también existen en
+la SPA de Apps Script, para que pueda funcionar de forma independiente
+al 100 %.
+
+- **Borrador reanudable** (`AppsScript/JS_Draft.html`, nuevo): al calcular
+  el puntaje se guarda un snapshot (sin la foto) en `localStorage`. Si el
+  usuario sale sin guardar, `Guide.initGuidePage()` muestra un aviso con
+  "Descartar" / "Ver y guardar" — mismo comportamiento que
+  `useDraft.ts` en React. Se descarta automáticamente tras guardar.
+  `Analysis.mostrarResultados()` ahora tolera `analysis.img === null`
+  (oculta la sección de foto en vez de fallar).
+- **Detalle de evaluación en el panel admin** (`JS_Dashboard.html`,
+  `Page_Dashboard.html`): clic en cualquier fila de la tabla abre un
+  modal con puntaje, riesgo, desglose silla/pantalla/teclado, objetos
+  detectados, recomendaciones y enlace a la foto en Drive.
+- **Alerta de riesgo alto** (`JS_Dashboard.html`, `Page_Dashboard.html`):
+  tarjeta roja "Casos que necesitan atención pronto" con los 5 casos
+  Alto/Muy Alto más recientes, debajo de las estadísticas; cada fila abre
+  el mismo modal de detalle.
+
+Se agregó `riskCfg(nivel)` en `JS_Dashboard.html` para unificar el color
+y la clase de badge por nivel de riesgo (antes duplicado en la tabla);
+lo reutilizan la tabla, la alerta y el modal. Módulo `Draft` registrado
+en `JS_Init.html` (chequeo de integridad) e incluido en `Index.html`.
+Estilos nuevos en `CSS_Components.html` (`.draft-card`, `.urgent-cases`,
+`.modal-*`), reutilizando los tokens de color/radio/sombra existentes —
+sin paleta nueva.
+
+**Pendiente:** no se pudo probar en vivo (el despliegue real de
+script.google.com sigue desactualizado respecto al repo, ver entrada de
+abajo) — verificado por lectura de código y por sintaxis de cada módulo.
+Requiere que el usuario copie los archivos actualizados (ver
+`AppsScript/INSTALACION.md` o el sincronizador) y vuelva a implementar.
+
 ## 2026-08-25 — Seis mejoras de experiencia (usuario + admin)
 
 A raíz de la pregunta "¿qué más podemos mejorar para la experiencia del

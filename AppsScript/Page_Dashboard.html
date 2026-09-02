@@ -5,15 +5,67 @@
     <p class="text-sm mt-2">Evaluaciones de todos los colaboradores</p>
   </div>
 
-  <!-- Estadísticas rápidas -->
-  <div class="stat-grid" id="dashStats">
-    <div class="stat-card"><div class="stat-num" id="statTotal">—</div><div class="stat-name">Evaluaciones</div></div>
-    <div class="stat-card"><div class="stat-num" id="statHigh">—</div><div class="stat-name">Riesgo alto</div></div>
-    <div class="stat-card"><div class="stat-num" id="statAvg">—</div><div class="stat-name">Puntaje prom.</div></div>
+  <!-- Resumen tipo "bento" -->
+  <div class="bento-grid">
+
+    <div class="bento-cell bento-score">
+      <div class="bento-score-top">
+        <span class="bento-eyebrow">Último puntaje ROSA</span>
+        <span class="bento-badge-icon" aria-hidden="true">✓</span>
+      </div>
+      <div class="bento-score-mid">
+        <div class="bento-score-num" id="bentoScoreNum">—</div>
+        <div class="badge badge-gray" id="bentoScoreBadge" style="margin-top:.6rem;">Sin datos</div>
+      </div>
+      <p class="bento-score-foot" id="bentoScoreFoot">Sin evaluaciones aún</p>
+    </div>
+
+    <div class="bento-cell bento-chart">
+      <div class="bento-chart-head">
+        <span class="bento-eyebrow">Historial de puntajes</span>
+        <span class="bento-chart-legend"><i></i>Índice ROSA</span>
+      </div>
+      <div id="chartTendencia"></div>
+    </div>
+
+    <div class="bento-tiles">
+      <div class="bento-tile">
+        <span class="bento-tile-icon" style="color:var(--c-brand);">👥</span>
+        <div><p class="bento-tile-val" id="statUsers">—</p><p class="bento-tile-label">Usuarios</p></div>
+      </div>
+      <div class="bento-tile">
+        <span class="bento-tile-icon" style="color:var(--c-brand);">📋</span>
+        <div><p class="bento-tile-val" id="statTotal">—</p><p class="bento-tile-label">Evaluaciones totales</p></div>
+      </div>
+      <div class="bento-tile">
+        <span class="bento-tile-icon" style="color:#EA580C;">📈</span>
+        <div><p class="bento-tile-val" id="statAvg">—</p><p class="bento-tile-label">Puntaje promedio</p></div>
+      </div>
+      <div class="bento-tile">
+        <span class="bento-tile-icon" style="color:#DC2626;">⚠</span>
+        <div><p class="bento-tile-val" id="statHigh">—</p><p class="bento-tile-label">Riesgo alto o mayor</p></div>
+      </div>
+    </div>
+
+    <div class="bento-cell bento-health">
+      <h3 class="bento-health-title">Salud del sistema</h3>
+      <div class="health-row">
+        <div class="health-label"><span>Cobertura de evaluaciones</span><span id="healthCoveragePct">0%</span></div>
+        <div class="health-track"><div class="health-fill" id="healthCoverageFill" style="width:0%;background:var(--c-brand);"></div></div>
+      </div>
+      <div class="health-row">
+        <div class="health-label"><span>Usuarios activos evaluados</span><span id="healthActivePct">0%</span></div>
+        <div class="health-track"><div class="health-fill" id="healthActiveFill" style="width:0%;background:#FF6B00;"></div></div>
+      </div>
+    </div>
+
   </div>
 
+  <!-- Casos que necesitan atención pronto -->
+  <div id="urgentCases" class="urgent-cases" hidden></div>
+
   <!-- Gráficas -->
-  <div class="dash-charts">
+  <div class="dash-charts" style="margin-top:1.25rem;">
     <section class="chart-card">
       <h2 class="chart-title">Distribución por nivel de riesgo</h2>
       <p class="chart-sub">Colaboradores evaluados en cada nivel</p>
@@ -26,12 +78,6 @@
       <div id="chartSecciones"></div>
     </section>
   </div>
-
-  <section class="chart-card" style="margin-top:1rem;">
-    <h2 class="chart-title">Evolución del puntaje promedio</h2>
-    <p class="chart-sub">Promedio mensual de todas las evaluaciones</p>
-    <div id="chartTendencia"></div>
-  </section>
 
   <!-- Filtros -->
   <div style="display:flex;gap:.75rem;margin-top:1.25rem;flex-wrap:wrap;">
@@ -48,7 +94,7 @@
 
   <!-- Tabla de registros -->
   <div class="table-wrap mt-4" id="dashTableWrap">
-    <table class="data-table">
+    <table class="data-table clickable-rows">
       <thead>
         <tr>
           <th>Fecha</th>
@@ -69,6 +115,22 @@
 
   <div style="margin-top:1.5rem;">
     <button class="btn btn-outline" onclick="Dashboard.exportCSV()">⬇ Exportar CSV</button>
+  </div>
+
+  <!-- Detalle de una evaluación -->
+  <div class="modal-overlay" id="evalModal" role="dialog" aria-modal="true"
+       aria-labelledby="modalNombre" hidden
+       onclick="if (event.target === this) Dashboard.cerrarDetalle();">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div>
+          <p class="modal-title" id="modalNombre"></p>
+          <p class="modal-sub" id="modalSub"></p>
+        </div>
+        <button class="modal-close" onclick="Dashboard.cerrarDetalle()" aria-label="Cerrar detalle">✕</button>
+      </div>
+      <div class="modal-body" id="modalBody"></div>
+    </div>
   </div>
 
 </div>
