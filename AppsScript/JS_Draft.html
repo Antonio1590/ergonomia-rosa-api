@@ -1,0 +1,101 @@
+<script>
+// ============================================================
+// JS_Draft — Borrador reanudable
+//
+// Si el usuario sale antes de guardar, el resultado ya calculado se
+// guarda en localStorage. Al volver a entrar puede retomarlo o
+// descartarlo, en vez de repetir la foto desde cero. Igual que en
+// React (src/hooks/useDraft.ts): se guarda todo salvo la foto, que
+// no sobrevive un recargo de página.
+// ============================================================
+
+var Draft = (function() {
+  var KEY = 'rosa_draft';
+
+  function snapshot(analysis) {
+    return {
+      puntos:     analysis.puntos,
+      objetos:    analysis.objetos,
+      angulos:    analysis.angulos,
+      encuadre:   analysis.encuadre,
+      respuestas: analysis.respuestas,
+      rosa:       analysis.rosa
+    };
+  }
+
+  function save(analysis) {
+    var user = App.get('user');
+    if (!user || !analysis.rosa) return;
+    try {
+      localStorage.setItem(KEY, JSON.stringify({
+        email:   user.email,
+        savedAt: new Date().toISOString(),
+        data:    snapshot(analysis)
+      }));
+    } catch (_) {
+      // Almacenamiento lleno o bloqueado: no es crítico, el usuario
+      // simplemente no podrá retomar si sale sin guardar.
+    }
+  }
+
+  function leerCrudo() {
+    try {
+      var raw = localStorage.getItem(KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // Solo cuenta si es del usuario que tiene la sesión abierta ahora
+  function propio() {
+    var stored = leerCrudo();
+    var user   = App.get('user');
+    if (!stored || !user || stored.email !== user.email) return null;
+    return stored;
+  }
+
+  function discard() {
+    try { localStorage.removeItem(KEY); } catch (_) {}
+    render();
+  }
+
+  // Lleva directo a resultados con lo ya calculado. Sin la foto no hay
+  // canvas que dibujar: Analysis.mostrarResultados ya sabe ocultar esa
+  // sección cuando analysis.img es null.
+  function restaurar() {
+    var stored = propio();
+    if (!stored) return;
+    var analysis = stored.data;
+    analysis.img = null;
+    App.set('analysis', analysis);
+    Analysis.mostrarResultados(analysis);
+    App.goTo('results');
+  }
+
+  function render() {
+    var cont = document.getElementById('draftNotice');
+    if (!cont) return;
+
+    var stored = propio();
+    if (!stored) { cont.hidden = true; cont.innerHTML = ''; return; }
+
+    var d = stored.data;
+    cont.innerHTML =
+      '<div class="draft-card">' +
+        '<div>' +
+          '<p class="draft-title">Tienes una evaluación sin guardar</p>' +
+          '<p class="draft-sub">Puntaje ' + d.rosa.score + ' · Riesgo ' + d.rosa.riskLevel +
+            ' · ' + new Date(stored.savedAt).toLocaleString('es-CO') + '</p>' +
+        '</div>' +
+        '<div class="draft-actions">' +
+          '<button class="btn btn-sm btn-outline" onclick="Draft.discard()">Descartar</button>' +
+          '<button class="btn btn-sm btn-primary" onclick="Draft.restaurar()">Ver y guardar</button>' +
+        '</div>' +
+      '</div>';
+    cont.hidden = false;
+  }
+
+  return { save: save, discard: discard, restaurar: restaurar, render: render };
+})();
+</script>

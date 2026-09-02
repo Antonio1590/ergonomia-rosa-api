@@ -103,6 +103,10 @@ var Analysis = (function() {
       analysis.rosa = Rosa.calcular(analysis.respuestas);
       App.set('analysis', analysis);
 
+      // Si cierra la pestaña antes de guardar, al volver puede retomar
+      // el resultado ya calculado sin repetir la foto.
+      Draft.save(analysis);
+
       await new Promise(function(res){ setTimeout(res, 120); });
 
       mostrarResultados(analysis);
@@ -157,7 +161,10 @@ var Analysis = (function() {
     btnSave.textContent = 'Guardar evaluación';
 
     renderGauge(rosa);
-    renderCanvas(analysis, rosa);
+    // Un borrador retomado no trae la foto (no sobrevive un recargo de
+    // página): sin imagen no hay nada que dibujar en el canvas.
+    if (analysis.img) renderCanvas(analysis, rosa);
+    else document.getElementById('photoSection').style.display = 'none';
     renderRecommendations(rosa.recommendations);
     renderDetectedObjects(analysis.objetos);
     renderSections(rosa.secciones);
@@ -435,6 +442,7 @@ var Analysis = (function() {
 
       App.toast('Evaluación guardada correctamente', 'ok');
       btn.textContent = '✓ Guardado';
+      Draft.discard();
 
     } catch (err) {
       App.toast('Error al guardar: ' + err.message, 'error');

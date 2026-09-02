@@ -65,6 +65,8 @@ var Guide = (function() {
 
   // ── Inicializar página de guía ───────────────────────────
   function initGuidePage() {
+    Draft.render();
+
     // Fotos de guía embebidas (base64): no dependen de ningún servidor
     showPhoto('guidePhoto1', 'guidePhoto1Placeholder', Photos.posturaLateral);
     showPhoto('guidePhoto2', 'guidePhoto2Placeholder', Photos.puestoTrabajo);

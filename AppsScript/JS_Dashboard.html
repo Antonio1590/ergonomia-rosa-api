@@ -15,12 +15,18 @@ var Dashboard = (function() {
       '<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--c-text-3);">Cargando…</td></tr>';
 
     try {
-      var result = await Api.getEvaluations();
-      if (!result.ok) throw new Error(result.error);
-      _all      = (result.data || []).reverse();  // más reciente primero
+      var results  = await Promise.all([Api.getEvaluations(), Api.getUsers()]);
+      var evalRes  = results[0];
+      var usersRes = results[1];
+      if (!evalRes.ok) throw new Error(evalRes.error);
+
+      _all      = (evalRes.data || []).reverse();  // más reciente primero
       _filtered = _all;
       _page     = 0;
-      renderStats();
+
+      var users = (usersRes.ok && Array.isArray(usersRes.data)) ? usersRes.data : [];
+      renderBento(users);
+      renderUrgentCases();
       renderCharts();
       renderTable();
     } catch (err) {
@@ -28,15 +34,48 @@ var Dashboard = (function() {
     }
   }
 
-  // ── Estadísticas ─────────────────────────────────────────
-  function renderStats() {
+  // ── Resumen "bento": puntaje más reciente, KPIs y salud ──
+  function renderBento(users) {
     var total  = _all.length;
     var high   = _all.filter(function(r){ return r.nivelRiesgo === 'Alto' || r.nivelRiesgo === 'Muy Alto'; }).length;
     var scores = _all.map(function(r){ return Number(r.puntajeFinal) || 0; }).filter(Boolean);
     var avg    = scores.length ? (scores.reduce(function(a,b){ return a+b; }, 0) / scores.length).toFixed(1) : '—';
+
+    document.getElementById('statUsers').textContent = users.length;
     document.getElementById('statTotal').textContent = total;
     document.getElementById('statHigh').textContent  = high;
     document.getElementById('statAvg').textContent   = avg;
+
+    // _all viene del más reciente al más viejo: el primero es "el último"
+    var last = total ? _all[0] : null;
+    var numEl   = document.getElementById('bentoScoreNum');
+    var badgeEl = document.getElementById('bentoScoreBadge');
+    var footEl  = document.getElementById('bentoScoreFoot');
+
+    if (last) {
+      var cfg = riskCfg(last.nivelRiesgo);
+      numEl.textContent   = last.puntajeFinal;
+      numEl.style.color   = cfg.hex;
+      badgeEl.textContent = last.nivelRiesgo;
+      badgeEl.className   = 'badge ' + cfg.badge;
+      footEl.textContent  = 'Última evaluación registrada: ' + new Date(last.fecha).toLocaleDateString('es-CO');
+    } else {
+      numEl.textContent   = '—';
+      numEl.style.color   = 'var(--c-text-3)';
+      badgeEl.textContent = 'Sin datos';
+      badgeEl.className   = 'badge badge-gray';
+      footEl.textContent  = 'Sin evaluaciones aún';
+    }
+
+    var coverage = Math.min(total * 10, 100);
+    var activo   = users.length > 0 ? Math.min(Math.round(total / users.length * 100), 100) : 0;
+    setHealth('healthCoverage', coverage);
+    setHealth('healthActive', activo);
+  }
+
+  function setHealth(prefix, pct) {
+    document.getElementById(prefix + 'Pct').textContent = pct + '%';
+    document.getElementById(prefix + 'Fill').style.width = pct + '%';
   }
 
   // ── Gráficas ─────────────────────────────────────────────
@@ -79,6 +118,110 @@ var Dashboard = (function() {
     });
   }
 
+  // ── Casos que necesitan atención pronto ──────────────────
+  // Sin esto, un admin solo se entera de un caso de riesgo Alto/Muy Alto
+  // si revisa la tabla completa. Muestra los 5 más recientes.
+  function renderUrgentCases() {
+    var cont = document.getElementById('urgentCases');
+    if (!cont) return;
+
+    var esUrgente = function(r) { return r.nivelRiesgo === 'Alto' || r.nivelRiesgo === 'Muy Alto'; };
+    var todos = _all.filter(esUrgente);
+    var casos = todos.slice(0, 5);   // _all ya viene del más reciente al más viejo
+
+    if (!casos.length) { cont.hidden = true; cont.innerHTML = ''; return; }
+
+    cont.innerHTML =
+      '<div class="urgent-head">' +
+        '<span class="urgent-icon" aria-hidden="true">⚠</span>' +
+        '<h3 class="urgent-title">Casos que necesitan atención pronto</h3>' +
+        '<span class="urgent-count">' + todos.length + '</span>' +
+      '</div>' +
+      '<div class="urgent-list">' +
+        casos.map(function(r) {
+          var cfg    = riskCfg(r.nivelRiesgo);
+          var nombre = r.nombre || (r.email || '').split('@')[0];
+          var fecha  = r.fecha ? new Date(r.fecha).toLocaleDateString('es-CO') : '—';
+          return '<button class="urgent-row" type="button">' +
+            '<span class="urgent-score" style="color:' + cfg.hex + '">' + r.puntajeFinal + '</span>' +
+            '<span class="urgent-name">' + nombre + '</span>' +
+            '<span class="urgent-date">' + fecha + '</span>' +
+            '<span class="badge ' + cfg.badge + '">' + r.nivelRiesgo + '</span>' +
+          '</button>';
+        }).join('') +
+      '</div>';
+    cont.hidden = false;
+
+    cont.querySelectorAll('.urgent-row').forEach(function(el, idx) {
+      el.addEventListener('click', function() { abrirDetalle(casos[idx]); });
+    });
+  }
+
+  // ── Detalle de una evaluación ─────────────────────────────
+  function abrirDetalle(registro) {
+    if (!registro) return;
+    var cfg = riskCfg(registro.nivelRiesgo);
+
+    document.getElementById('modalNombre').textContent = registro.nombre || registro.email;
+    document.getElementById('modalSub').textContent =
+      (registro.cedula ? 'Cédula ' + registro.cedula + ' · ' : '') +
+      (registro.fecha
+        ? new Date(registro.fecha).toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })
+        : '');
+
+    var det = {};
+    try {
+      det = typeof registro.detalles === 'string' ? JSON.parse(registro.detalles) : (registro.detalles || {});
+    } catch (e) {}
+    var objetos = Array.isArray(det.objetos) ? det.objetos : (det.objetos ? [det.objetos] : []);
+    var recs = (registro.recomendaciones || '').split('|').map(function(r) { return r.trim(); }).filter(Boolean);
+
+    var html = '<div class="modal-score-row">' +
+      '<span class="modal-score" style="color:' + cfg.hex + '">' + registro.puntajeFinal + '</span>' +
+      '<span class="badge ' + cfg.badge + '">Riesgo ' + registro.nivelRiesgo + '</span>' +
+    '</div>';
+
+    if (det.silla != null || det.pantalla != null || det.teclado != null) {
+      var TILES = [['silla', 'Silla'], ['pantalla', 'Pantalla'], ['teclado', 'Teclado/mouse']];
+      html += '<div class="modal-grid">' + TILES.map(function(t) {
+        var v = det[t[0]];
+        return '<div class="modal-tile"><p class="modal-tile-val">' + (v != null ? v : '—') + '</p>' +
+               '<p class="modal-tile-label">' + t[1] + '</p></div>';
+      }).join('') + '</div>';
+    }
+
+    if (objetos.length) {
+      html += '<p class="modal-section-title">Objetos detectados</p><div class="modal-chips">' +
+        objetos.map(function(o) { return '<span class="modal-chip">' + o + '</span>'; }).join('') +
+      '</div>';
+    }
+
+    if (recs.length) {
+      html += '<p class="modal-section-title">Recomendaciones</p><ul class="modal-recs">' +
+        recs.map(function(r, i) {
+          return '<li><span class="modal-rec-num">' + (i + 1) + '</span>' + r + '</li>';
+        }).join('') +
+      '</ul>';
+    }
+
+    if (registro.urlImagen) {
+      html += '<a class="modal-photo-link" href="' + registro.urlImagen + '" target="_blank" rel="noopener">Ver foto en Drive</a>';
+    }
+
+    document.getElementById('modalBody').innerHTML = html;
+    document.getElementById('evalModal').hidden = false;
+  }
+
+  function cerrarDetalle() {
+    document.getElementById('evalModal').hidden = true;
+  }
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key !== 'Escape') return;
+    var modal = document.getElementById('evalModal');
+    if (modal && !modal.hidden) cerrarDetalle();
+  });
+
   // El detalle viaja como JSON en la hoja
   function leerDetalle(registro, clave) {
     if (!registro.detalles) return 0;
@@ -87,6 +230,15 @@ var Dashboard = (function() {
         ? JSON.parse(registro.detalles) : registro.detalles;
       return Number(d[clave]) || 0;
     } catch (e) { return 0; }
+  }
+
+  // Color y clase de badge por nivel de riesgo, en un solo lugar:
+  // lo usan la tabla, la alerta de riesgo alto y el modal de detalle.
+  function riskCfg(nivel) {
+    if (nivel === 'Bajo')  return { hex: Charts.RIESGO['Bajo'],  badge: 'badge-green' };
+    if (nivel === 'Medio') return { hex: Charts.RIESGO['Medio'], badge: 'badge-yellow' };
+    if (nivel === 'Alto' || nivel === 'Muy Alto') return { hex: Charts.RIESGO[nivel], badge: 'badge-red' };
+    return { hex: '#6B7280', badge: 'badge-gray' };
   }
 
   function colorPorPuntaje(p) {
@@ -160,21 +312,23 @@ var Dashboard = (function() {
       var fecha   = r.fecha ? new Date(r.fecha).toLocaleDateString('es-CO') : '—';
       var nombre  = r.nombre || (r.email || '').split('@')[0];
       var score   = Number(r.puntajeFinal).toFixed(1);
-      var riskCls = r.nivelRiesgo === 'Bajo' ? 'badge-green'
-                  : r.nivelRiesgo === 'Medio' ? 'badge-yellow'
-                  : r.nivelRiesgo === 'Alto' || r.nivelRiesgo === 'Muy Alto' ? 'badge-red'
-                  : 'badge-gray';
+      var cfg     = riskCfg(r.nivelRiesgo);
       var fotoLink = r.urlImagen
-        ? '<a href="' + r.urlImagen + '" target="_blank" style="color:var(--c-brand);">Ver</a>'
+        ? '<a href="' + r.urlImagen + '" target="_blank" style="color:var(--c-brand);" onclick="event.stopPropagation();">Ver</a>'
         : '—';
       return '<tr>' +
         '<td>' + fecha + '</td>' +
         '<td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + nombre + '</td>' +
         '<td style="font-weight:700;">' + score + '</td>' +
-        '<td><span class="badge ' + riskCls + '">' + (r.nivelRiesgo || '—') + '</span></td>' +
+        '<td><span class="badge ' + cfg.badge + '">' + (r.nivelRiesgo || '—') + '</span></td>' +
         '<td>' + fotoLink + '</td>' +
         '</tr>';
     }).join('');
+
+    // Clic en cualquier fila abre el detalle completo de esa evaluación
+    tbody.querySelectorAll('tr').forEach(function(tr, idx) {
+      tr.addEventListener('click', function() { abrirDetalle(slice[idx]); });
+    });
 
     // Paginación
     var totalPages = Math.ceil(_filtered.length / PAGE_SIZE);
@@ -211,6 +365,6 @@ var Dashboard = (function() {
     URL.revokeObjectURL(url);
   }
 
-  return { load, filter, exportCSV };
+  return { load, filter, exportCSV, abrirDetalle, cerrarDetalle };
 })();
 </script>
