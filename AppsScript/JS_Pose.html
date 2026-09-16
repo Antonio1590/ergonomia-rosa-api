@@ -1,0 +1,94 @@
+<script type="module">
+// ============================================================
+// JS_Pose — Detección de pose con MediaPipe Tasks Vision
+// Expone window.Pose para que los demás módulos lo usen
+// ============================================================
+
+import { PoseLandmarker, FilesetResolver }
+  from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/+esm';
+
+var WASM_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
+var MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task';
+
+var _detector = null;
+
+async function init() {
+  if (_detector) return _detector;
+  var vision = await FilesetResolver.forVisionTasks(WASM_CDN);
+  _detector = await PoseLandmarker.createFromOptions(vision, {
+    baseOptions:  { modelAssetPath: MODEL_URL, delegate: 'CPU' },
+    runningMode:  'IMAGE',
+    numPoses:     1
+  });
+  return _detector;
+}
+
+// Retorna los 33 landmarks normalizados [0-1] o null si no se detectó pose
+async function detect(imgElement) {
+  try {
+    var lm = await init();
+    var result = lm.detect(imgElement);
+    if (!result.landmarks || result.landmarks.length === 0) return null;
+    return result.landmarks[0];  // Array de 33 puntos {x, y, z, visibility}
+  } catch (err) {
+    console.warn('[Pose] Error:', err.message);
+    return null;
+  }
+}
+
+// Calcula el ángulo en el punto medio de tres puntos 2D (grados)
+function angle3(a, mid, b) {
+  var ax = a.x - mid.x, ay = a.y - mid.y;
+  var bx = b.x - mid.x, by = b.y - mid.y;
+  var dot  = ax*bx + ay*by;
+  var magA = Math.sqrt(ax*ax + ay*ay);
+  var magB = Math.sqrt(bx*bx + by*by);
+  if (magA < 1e-6 || magB < 1e-6) return 0;
+  return Math.round(Math.acos(Math.min(1, Math.max(-1, dot / (magA * magB)))) * 180 / Math.PI);
+}
+
+// Índices de landmarks MediaPipe (de los 33 puntos)
+var LM = {
+  NOSE:0, L_EAR:7, R_EAR:8, L_SHOULDER:11, R_SHOULDER:12,
+  L_ELBOW:13, R_ELBOW:14, L_WRIST:15, R_WRIST:16,
+  L_HIP:23, R_HIP:24, L_KNEE:25, R_KNEE:26,
+  L_ANKLE:27, R_ANKLE:28
+};
+
+// Extrae ángulos clave de los landmarks
+function extractAngles(lms) {
+  var angles = {};
+
+  // Cuello: ángulo entre oreja, hombro y cadera (flexión lateral/anterior)
+  angles.neck = Math.abs(
+    angle3(lms[LM.L_EAR], lms[LM.L_SHOULDER], lms[LM.L_HIP]) - 90
+  );
+
+  // Tronco: ángulo de inclinación del torso respecto a vertical
+  var torsoAngle = angle3(lms[LM.L_SHOULDER], lms[LM.L_HIP], lms[LM.L_KNEE]);
+  angles.trunk = Math.abs(torsoAngle - 90);
+
+  // Rodilla izquierda
+  angles.leftKnee  = angle3(lms[LM.L_HIP],  lms[LM.L_KNEE],  lms[LM.L_ANKLE]);
+
+  // Rodilla derecha
+  angles.rightKnee = angle3(lms[LM.R_HIP],  lms[LM.R_KNEE],  lms[LM.R_ANKLE]);
+
+  // Codo izquierdo
+  angles.leftElbow  = angle3(lms[LM.L_SHOULDER], lms[LM.L_ELBOW], lms[LM.L_WRIST]);
+
+  // Codo derecho
+  angles.rightElbow = angle3(lms[LM.R_SHOULDER], lms[LM.R_ELBOW], lms[LM.R_WRIST]);
+
+  // Hombro izquierdo (elevación del brazo)
+  angles.leftShoulder  = angle3(lms[LM.L_HIP], lms[LM.L_SHOULDER], lms[LM.L_ELBOW]);
+
+  // Hombro derecho
+  angles.rightShoulder = angle3(lms[LM.R_HIP], lms[LM.R_SHOULDER], lms[LM.R_ELBOW]);
+
+  return angles;
+}
+
+// Exponer al scope global para los demás módulos (no-module)
+window.Pose = { init, detect, extractAngles, LM, angle3 };
+</script>

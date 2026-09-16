@@ -8,33 +8,28 @@
 // Gemini SOLO observa la fotografía. El puntaje ROSA se calcula
 // después en JS_Rosa con las tablas oficiales, de modo que las
 // cifras siguen siendo verificables y no dependen del modelo.
-//
-// CONFIGURACIÓN (una sola vez):
-//   Configuración del proyecto → Propiedades de la secuencia
-//   → Agregar propiedad:  GEMINI_API_KEY = <tu clave>
-//   O ejecuta guardarClaveGemini('tu-clave') desde el editor.
 // ============================================================
 
-var GEMINI_MODELO_POR_DEFECTO = 'gemini-2.5-flash';
+var GEMINI_MODELO_POR_DEFECTO = 'gemini-2.0-flash';
 var GEMINI_URL_BASE = 'https://generativelanguage.googleapis.com/v1beta/models/';
 
 /**
  * Guarda la clave en las propiedades del proyecto.
- * Ejecutar UNA vez desde el editor y luego borrar la clave de aquí.
+ * Ejecutar UNA vez desde el editor si se desea asignar manualmente.
  */
 function guardarClaveGemini(clave) {
   if (!clave) throw new Error('Pasa la clave como argumento');
   PropertiesService.getScriptProperties().setProperty('GEMINI_API_KEY', clave);
-  return 'Clave guardada';
+  return 'Clave guardada correctamente';
 }
 
-/** Comprueba que la configuración esté completa. */
+/** Comprueba que la configuración de las propiedades esté completa. */
 function verificarGemini() {
   var props = PropertiesService.getScriptProperties();
   var clave = props.getProperty('GEMINI_API_KEY');
   Logger.log(clave ? 'Clave configurada (' + clave.length + ' caracteres)'
                    : 'FALTA la propiedad GEMINI_API_KEY');
-  Logger.log('Modelo: ' + (props.getProperty('GEMINI_MODELO') || GEMINI_MODELO_POR_DEFECTO));
+  Logger.log('Modelo activo: ' + (props.getProperty('GEMINI_MODELO') || GEMINI_MODELO_POR_DEFECTO));
   return !!clave;
 }
 
@@ -114,7 +109,7 @@ function esquemaRosa_() {
 
       angulos: {
         type: 'OBJECT',
-        description: 'Ángulos estimados en grados',
+        description: 'Ángulos estimados en grados sexagesimales',
         properties: {
           cuello:  { type: 'NUMBER', description: 'Flexión del cuello respecto a la vertical' },
           tronco:  { type: 'NUMBER', description: 'Inclinación del tronco respecto a la vertical' },
@@ -133,10 +128,10 @@ function esquemaRosa_() {
             clase: enumerado(
               ['monitor','laptop','teclado','mouse','telefono','silla','escritorio','atril','persona'],
               'Tipo de objeto'),
-            x: { type: 'NUMBER', description: 'Borde izquierdo, escala 0 a 1000' },
-            y: { type: 'NUMBER', description: 'Borde superior, escala 0 a 1000' },
-            w: { type: 'NUMBER', description: 'Ancho, escala 0 a 1000' },
-            h: { type: 'NUMBER', description: 'Alto, escala 0 a 1000' }
+            x: { type: 'NUMBER', description: 'Borde izquierdo (xmin), escala 0 a 1000' },
+            y: { type: 'NUMBER', description: 'Borde superior (ymin), escala 0 a 1000' },
+            w: { type: 'NUMBER', description: 'Ancho del bounding box, escala 0 a 1000' },
+            h: { type: 'NUMBER', description: 'Alto del bounding box, escala 0 a 1000' }
           }
         }
       },
@@ -151,8 +146,8 @@ function esquemaRosa_() {
             nombre: enumerado(
               ['oreja','hombro','codo','muneca','cadera','rodilla','tobillo'],
               'Articulación'),
-            x: { type: 'NUMBER', description: 'Horizontal, escala 0 a 1000' },
-            y: { type: 'NUMBER', description: 'Vertical, escala 0 a 1000' }
+            x: { type: 'NUMBER', description: 'Coordenada Horizontal, escala 0 a 1000' },
+            y: { type: 'NUMBER', description: 'Coordenada Vertical, escala 0 a 1000' }
           }
         }
       }
@@ -165,17 +160,17 @@ function esquemaRosa_() {
    ============================================================ */
 function instruccionRosa_() {
   return [
-    'Eres un evaluador ergonómico. Analiza esta fotografía de un puesto de trabajo de oficina',
-    'aplicando los criterios del método ROSA (Rapid Office Strain Assessment).',
+    'Eres un experto evaluador ergonómico de alta precisión. Analiza esta fotografía de un puesto de trabajo de oficina',
+    'aplicando con máxima objetividad los criterios del método ROSA (Rapid Office Strain Assessment).',
     '',
-    'REGLAS IMPORTANTES:',
+    'REGLAS DE EVALUACIÓN:',
     '1. Responde ÚNICAMENTE sobre lo que se ve en la imagen. No supongas ni completes con lo habitual.',
-    '2. Si un aspecto NO es visible o no puedes determinarlo, responde el valor normal:',
+    '2. Si un aspecto NO es visible o no puedes determinarlo con certeza, responde el valor normal:',
     '   "ok" en las opciones de texto y false en las casillas. Nunca inventes un problema.',
     '3. Marca un problema solo cuando sea claramente observable en la foto.',
     '4. Si no hay ninguna persona sentada, pon personaDetectada en false y deja el resto por defecto.',
     '',
-    'CRITERIOS DE REFERENCIA:',
+    'CRITERIOS ERGONÓMICOS:',
     '- seatHeight: rodillas a 90 grados es correcto. Si las rodillas quedan por encima del nivel',
     '  de la cadera, la silla está baja ("low"); si quedan por debajo, está alta ("high").',
     '- backSupport: "forward" si la persona trabaja inclinada hacia adelante sin apoyar la espalda;',
@@ -185,10 +180,11 @@ function instruccionRosa_() {
     '  Si la persona baja la cabeza para mirar, es "low"; si la sube, es "high".',
     '- phone: "cradle" únicamente si se ve el teléfono sujeto entre el hombro y la oreja.',
     '',
-    'COORDENADAS: usa la escala 0 a 1000 tanto en horizontal como en vertical,',
-    'donde 0,0 es la esquina superior izquierda de la imagen.',
-    'En "puntos" incluye solo las articulaciones que realmente se distinguen.',
-    'Si se ve de perfil y solo un lado es visible, reporta ese lado una sola vez.'
+    'DETECCIÓN DE OBJETOS Y PUNTOS CLAVE (PRECISIÓN ESPACIAL):',
+    '- Usa la escala norma 0 a 1000 tanto en horizontal (x) como en vertical (y), donde 0,0 es la esquina superior izquierda.',
+    '- Para los objetos (bounding boxes), calcula rigurosamente x (xmin), y (ymin), w (ancho) y h (alto).',
+    '- En "puntos" identifica la posición exacta del centro de las articulaciones visibles.',
+    '- En "angulos", estimación geométrica del ángulo formado por las articulaciones visibles. Si una articulación no es visible, omite la estimación de ese ángulo.'
   ].join('\n');
 }
 
@@ -217,7 +213,7 @@ function handleAnalyzePhoto(params) {
     generationConfig: {
       responseMimeType: 'application/json',
       responseSchema: esquemaRosa_(),
-      temperature: 0.1          // observación, no creatividad
+      temperature: 0.1          // observación objetiva, sin alucinaciones
     }
   };
 
@@ -271,14 +267,16 @@ function mensajeDeError_(codigo, texto, modelo) {
   } catch (_) {}
 
   if (codigo === 400 && detalle.indexOf('API key') !== -1) {
-    return 'La clave de Gemini no es válida. Revisa GEMINI_API_KEY.';
+    return 'La clave de Gemini no es válida. Revisa GEMINI_API_KEY en Propiedades de script.';
   }
   if (codigo === 403) {
     return 'La clave de Gemini no tiene permiso o la API no está habilitada.';
   }
   if (codigo === 404) {
-    return 'El modelo "' + modelo + '" no está disponible para esta clave. ' +
-           'Cambia la propiedad GEMINI_MODELO.';
+    return 'El modelo "' + modelo + '" no está disponible para esta clave. Cambia la propiedad GEMINI_MODELO a gemini-2.0-flash.';
+  }
+  if (codigo === 503) {
+    return 'Gemini está saturado en este momento. Espera unos segundos y vuelve a analizar la foto.';
   }
   if (codigo === 429) {
     return 'Se alcanzó el límite de solicitudes de Gemini. Intenta en unos minutos.';

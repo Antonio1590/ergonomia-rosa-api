@@ -1,0 +1,478 @@
+<script>
+// ============================================================
+// JS_Ruta — Ruta de ingreso (filtros 1, 2 y 3)
+// ============================================================
+
+var Ruta = (function() {
+  var _datos   = null;
+  var _casos   = [];
+  var _filtrados = [];
+  var _vista   = '';     // '', 'programado', '1', '2', '3', 'cerrado'
+  var _limite  = 50;
+  var _cargando = false;
+  var _abierto = null;
+
+  var NOMBRE_FILTRO = { 1: 'Auto reporte', 2: 'Seguimiento uno a uno', 3: 'Visita virtual (IPT)' };
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function $(id) { return document.getElementById(id); }
+
+  // ── Navegación ───────────────────────────────────────────
+  function syncNav() {
+    Entrada.syncNav();
+  }
+
+  // ── Carga ────────────────────────────────────────────────
+  async function load() {
+    if (_cargando) return;
+    _cargando = true;
+    var btn = $('rutaBtnActualizar');
+    btn.disabled = true;
+    btn.textContent = 'Actualizando…';
+    $('rutaInfo').textContent = 'Leyendo la métrica y los formularios…';
+
+    try {
+      var r = await Api.rutaListar();
+      if (!r.ok) throw new Error(r.error);
+      _datos = r.data;
+      _casos = r.data.casos || [];
+      renderEncabezado();
+      renderPipeline();
+      filtrar();
+    } catch (err) {
+      App.toast('No se pudo cargar la ruta: ' + err.message, 'error');
+      $('rutaInfo').textContent = 'No se pudo cargar. Revisa la configuración y vuelve a intentar.';
+      $('rutaTabla').innerHTML = '<tr><td colspan="4" class="ruta-vacio">Sin datos.</td></tr>';
+    } finally {
+      _cargando = false;
+      btn.disabled = false;
+      btn.textContent = 'Actualizar';
+    }
+  }
+
+  function renderEncabezado() {
+    var cfg = _datos.config;
+    $('rutaIntro').textContent =
+      'Colaboradores que ingresaron en los últimos ' + cfg.ventana + ' días. El filtro 1 se habilita a los ' +
+      cfg.diasFiltro1 + ' días de ingreso; un caso se marca vencido tras ' + cfg.diasAlerta + ' días sin respuesta.';
+    $('rutaNombreProgramado').textContent = 'Aún no cumplen ' + cfg.diasFiltro1 + ' días';
+    $('rutaMeta').textContent = 'Datos del ' + _datos.generado;
+
+    var avisos = [];
+    if (_datos.metricaError) {
+      avisos.push('<div class="ruta-aviso error">No se pudo leer la métrica: ' + esc(_datos.metricaError) + '</div>');
+    }
+    (_datos.formularios || []).forEach(function(f) {
+      if (f.error) {
+        avisos.push('<div class="ruta-aviso error">Formulario ' + f.n + ' (' + esc(f.titulo) + '): ' + esc(f.error) + '</div>');
+      }
+    });
+    if (_datos.sinFecha) {
+      avisos.push('<div class="ruta-aviso">' + _datos.sinFecha +
+        ' persona(s) de la métrica no tienen FECHA_INICIO en formato DD/MM/AAAA y quedaron fuera de la ruta.</div>');
+    }
+    $('rutaAvisos').innerHTML = avisos.join('');
+  }
+
+  function renderPipeline() {
+    var n = { programado: 0, cerrado: 0, 1: 0, 2: 0, 3: 0 };
+    var v = { 1: 0, 2: 0, 3: 0 };
+    _casos.forEach(function(c) {
+      if (c.estado === 'programado') n.programado++;
+      else if (c.estado === 'cerrado') n.cerrado++;
+      else if (c.estado === 'pendiente') {
+        n[c.etapa]++;
+        if (c.vencido) v[c.etapa]++;
+      }
+    });
+    $('rutaCntProgramado').textContent = n.programado;
+    $('rutaCntCerrado').textContent = n.cerrado;
+    [1, 2, 3].forEach(function(e) {
+      $('rutaCnt' + e).textContent = n[e];
+      $('rutaVen' + e).textContent = v[e] ? v[e] + (v[e] === 1 ? ' vencido' : ' vencidos') : '';
+      $('rutaCnt' + e).closest('.ruta-paso').classList.toggle('tiene-vencidos', v[e] > 0);
+    });
+    marcarVista();
+  }
+
+  function marcarVista() {
+    document.querySelectorAll('#rutaPipeline .ruta-paso').forEach(function(b) {
+      b.setAttribute('aria-pressed', String(b.getAttribute('data-vista') === _vista));
+    });
+  }
+
+  // ── Filtros ──────────────────────────────────────────────
+  function verEtapa(vista) {
+    _vista = _vista === vista ? '' : vista;
+    $('rutaEstado').value = '';
+    marcarVista();
+    filtrar();
+  }
+
+  function limpiar() {
+    _vista = '';
+    $('rutaBuscar').value = '';
+    $('rutaEstado').value = '';
+    marcarVista();
+    filtrar();
+  }
+
+  function filtrar() {
+    var q = $('rutaBuscar').value.trim().toLowerCase();
+    var estado = $('rutaEstado').value;
+
+    _filtrados = _casos.filter(function(c) {
+      if (_vista === 'programado' && c.estado !== 'programado') return false;
+      if (_vista === 'cerrado' && c.estado !== 'cerrado') return false;
+      if (/^[123]$/.test(_vista) && !(c.estado === 'pendiente' && String(c.etapa) === _vista)) return false;
+
+      if (estado === 'vencido' && !(c.estado === 'pendiente' && c.vencido)) return false;
+      if (estado && estado !== 'vencido' && c.estado !== estado) return false;
+
+      if (q && (c.nombre || '').toLowerCase().indexOf(q) === -1 && c.cedula.indexOf(q) === -1) return false;
+      return true;
+    });
+
+    _limite = 50;
+    renderTabla();
+  }
+
+  function mostrarMas() {
+    _limite += 50;
+    renderTabla();
+  }
+
+  // ── Tabla ────────────────────────────────────────────────
+  function claseTramo(c, n) {
+    var f = c.filtros[n];
+    if (f.estado === 'pendiente') return c.vencido ? 'vencido' : 'pendiente';
+    return f.estado;
+  }
+
+  function badgeEstado(c) {
+    if (c.estado === 'pendiente') {
+      var cls = c.vencido ? 'badge-red' : 'badge-yellow';
+      var txt = (c.vencido ? 'Vencido' : 'Pendiente') + ' · filtro ' + c.etapa;
+      return '<span class="badge ' + cls + '">' + txt + '</span>' +
+        '<span class="ruta-sub">' + c.diasEspera + (c.diasEspera === 1 ? ' día' : ' días') + ' esperando</span>';
+    }
+    if (c.estado === 'programado') {
+      return '<span class="badge badge-gray">Programado</span><span class="ruta-sub">Filtro 1 el ' + esc(c.pendienteDesde) + '</span>';
+    }
+    if (c.estado === 'sin_fecha') return '<span class="badge badge-gray">Sin fecha de inicio</span>';
+    return '<span class="badge badge-green">Cerrado</span><span class="ruta-sub">' + esc(c.motivo) + '</span>';
+  }
+
+  function renderTabla() {
+    var info = $('rutaInfo');
+    var tbody = $('rutaTabla');
+
+    if (!_casos.length) {
+      info.textContent = '';
+      tbody.innerHTML = '<tr><td colspan="4" class="ruta-vacio">No hay colaboradores en la ruta. ' +
+        'Revisa que la métrica tenga ingresos recientes con FECHA_INICIO.</td></tr>';
+      $('rutaMas').hidden = true;
+      return;
+    }
+
+    info.textContent = _filtrados.length === _casos.length
+      ? _casos.length + ' colaboradores en la ruta'
+      : _filtrados.length + ' de ' + _casos.length + ' colaboradores';
+
+    if (!_filtrados.length) {
+      tbody.innerHTML = '<tr><td colspan="4" class="ruta-vacio">Ningún caso coincide con los filtros.</td></tr>';
+      $('rutaMas').hidden = true;
+      return;
+    }
+
+    tbody.innerHTML = _filtrados.slice(0, _limite).map(function(c) {
+      var tramos = [1, 2, 3].map(function(n) {
+        return '<i class="' + claseTramo(c, n) + '" title="Filtro ' + n + ': ' + c.filtros[n].estado.replace('_', ' ') + '"></i>';
+      }).join('');
+      var textoTramos = [1, 2, 3].map(function(n) { return 'filtro ' + n + ' ' + c.filtros[n].estado.replace('_', ' '); }).join(', ');
+
+      return '<tr tabindex="0" data-cedula="' + esc(c.cedula) + '">' +
+        '<td class="ruta-persona"><strong>' + esc(c.nombre || 'Sin nombre') +
+          (c.perfilAdmin ? ' <span class="badge badge-brand" style="font-size:.62rem;vertical-align:middle;">Admin</span>' : '') +
+          '</strong><span>' + (c.sinCedulaReal ? esc(c.correo) : esc(c.cedula)) + '</span></td>' +
+        '<td class="ruta-col-ingreso">' + esc(c.fechaInicio) +
+          (c.dias != null ? '<span class="ruta-sub">hace ' + c.dias + (c.dias === 1 ? ' día' : ' días') + '</span>' : '') + '</td>' +
+        '<td><span class="ruta-track" aria-hidden="true">' + tramos + '</span><span class="solo-lectores">' + textoTramos + '</span></td>' +
+        '<td>' + badgeEstado(c) + '</td>' +
+      '</tr>';
+    }).join('');
+
+    tbody.querySelectorAll('tr[data-cedula]').forEach(function(tr) {
+      var abrir = function() { abrirDetalle(tr.getAttribute('data-cedula')); };
+      tr.addEventListener('click', abrir);
+      tr.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrir(); }
+      });
+    });
+
+    $('rutaMas').hidden = _filtrados.length <= _limite;
+  }
+
+  // ── Detalle ──────────────────────────────────────────────
+  var ESTADO_FILTRO = {
+    completado: ['badge-green', 'Respondido'],
+    pendiente:  ['badge-yellow', 'Pendiente'],
+    programado: ['badge-gray', 'Programado'],
+    omitido:    ['badge-gray', 'Omitido'],
+    no_aplica:  ['badge-gray', 'No aplica'],
+    en_espera:  ['badge-gray', 'En espera']
+  };
+
+  function htmlEtapa(c, n) {
+    var f = c.filtros[n];
+    var est = ESTADO_FILTRO[f.estado] || ['badge-gray', f.estado];
+    if (f.estado === 'pendiente' && c.vencido) est = ['badge-red', 'Vencido'];
+
+    var info = [];
+    if (f.fecha) info.push('Respondido el ' + esc(f.fecha));
+    if (f.estado === 'pendiente') info.push('Pendiente desde el ' + esc(c.pendienteDesde) + ' (' + c.diasEspera + ' días)');
+    if (f.estado === 'programado') info.push('Se habilita el ' + esc(c.pendienteDesde));
+    if (f.aviso) info.push(n === 3 ? 'Aviso a Salud Organizacional: ' + esc(f.aviso) : 'Correo enviado: ' + esc(f.aviso));
+
+    var activas = f.hallazgos.filter(function(h) { return h.activa; });
+    var informativos = f.hallazgos.filter(function(h) { return !h.activa; });
+    var lista = '';
+    if (f.hallazgos.length) {
+      lista = '<ul class="ruta-hallazgos">' +
+        activas.concat(informativos).map(function(h) {
+          return '<li class="' + (h.activa ? '' : 'info') + '">' + esc(h.texto) +
+            (h.detalle ? ': <em>' + esc(h.detalle) + '</em>' : '') + '</li>';
+        }).join('') + '</ul>';
+    } else if (f.estado === 'completado' && n < 3) {
+      lista = '<p class="ruta-etapa-info">Sin hallazgos.</p>';
+    }
+    if (n === 3 && f.concepto) {
+      lista += '<p class="ruta-etapa-info" style="margin-top:.5rem;"><strong>Concepto:</strong> ' + esc(f.concepto) + '</p>';
+    }
+    if (n === 2 && c.rosa) {
+      lista += '<p class="ruta-etapa-info" style="margin-top:.5rem;">Última evaluación ROSA: ' +
+        esc(c.rosa.puntaje) + '/10 · ' + esc(c.rosa.nivel) + ' (' + esc(c.rosa.fecha) + ')</p>';
+    }
+
+    var actual = c.estado === 'pendiente' && c.etapa === n;
+    return '<li class="ruta-etapa' + (actual ? ' actual' : '') + '">' +
+      '<div class="ruta-etapa-head"><h3>Filtro ' + n + ' · ' + NOMBRE_FILTRO[n] + '</h3>' +
+      '<span class="badge ' + est[0] + '">' + est[1] + '</span></div>' +
+      (info.length ? '<p class="ruta-etapa-info">' + info.join('<br>') + '</p>' : '') +
+      lista +
+    '</li>';
+  }
+
+  function htmlAcciones(c) {
+    var b = [];
+    var dec = c.decision || '';
+
+    if (c.estado === 'pendiente' && c.etapa === 3) {
+      b.push('<button class="btn btn-sm btn-primary" data-accion="visita">Diligenciar visita (filtro 3)</button>');
+    }
+    if (c.estado === 'pendiente') {
+      var yaEnviado = !!c.enviados[c.etapa];
+      var etiquetaEnvio = c.etapa === 3
+        ? (yaEnviado ? 'Reenviar aviso de visita' : 'Avisar a Salud Organizacional')
+        : (yaEnviado ? 'Reenviar formulario ' + c.etapa : 'Enviar formulario ' + c.etapa);
+      b.push('<button class="btn btn-sm ' + (c.etapa === 3 ? 'btn-outline' : 'btn-primary') + '" data-accion="enviar">' + etiquetaEnvio + '</button>');
+    }
+    if ((c.estado === 'pendiente' || c.estado === 'cerrado') && c.etapa < 3 && dec.indexOf('cerrar') !== 0 &&
+        dec !== 'escalar:' + c.etapa) {
+      b.push('<button class="btn btn-sm btn-outline" data-accion="escalar:' + c.etapa + '">Pasar al filtro ' + (c.etapa + 1) + '</button>');
+    }
+    if (c.estado === 'pendiente' || c.estado === 'programado') {
+      b.push('<button class="btn btn-sm btn-outline" data-accion="cerrar:' + c.etapa + '">Cerrar caso</button>');
+    }
+    if (dec) {
+      b.push('<button class="btn btn-sm btn-ghost" data-accion="quitar">' +
+        (dec.indexOf('cerrar') === 0 ? 'Reabrir caso' : 'Deshacer paso manual') + '</button>');
+    }
+
+    var decisionTexto = dec
+      ? '<p class="ruta-etapa-info" style="margin-bottom:.5rem;">Decisión manual de ' + esc(c.decididoPor) +
+        ' el ' + esc(c.fechaDecision) + '</p>'
+      : '';
+
+    return '<div class="ruta-acciones">' + decisionTexto +
+      '<label for="rutaNota" class="text-xs text-muted" style="display:block;margin-bottom:.25rem;">Nota interna</label>' +
+      '<textarea class="input" id="rutaNota" maxlength="500" placeholder="Qué se habló, por qué se cierra o se escala…">' +
+        esc(c.nota) + '</textarea>' +
+      '<div class="ruta-botones">' + b.join('') + '</div>' +
+    '</div>';
+  }
+
+  function abrirDetalle(cedula) {
+    var c = _casos.filter(function(x) { return x.cedula === cedula; })[0];
+    if (!c) return;
+    _abierto = cedula;
+
+    $('rutaModalNombre').textContent = c.nombre || 'Sin nombre';
+    $('rutaModalSub').textContent = (c.sinCedulaReal ? 'Sin cédula registrada' : 'Cédula ' + c.cedula) + (c.cargo ? ' · ' + c.cargo : '');
+
+    var tiles = [
+      ['Ingreso', c.fechaInicio + (c.dias != null ? ', hace ' + c.dias + ' días' : '')],
+      ['Correo', c.correo || 'Sin correo en la métrica'],
+      ['Ciudad', c.ciudad]
+    ].filter(function(t) { return t[1]; }).map(function(t) {
+      return '<div class="modal-tile"><div class="modal-tile-label">' + t[0] + '</div><div class="modal-tile-val">' + esc(t[1]) + '</div></div>';
+    }).join('');
+
+    $('rutaModalBody').innerHTML =
+      '<div class="modal-grid">' + tiles + '</div>' +
+      '<ol class="ruta-etapas">' + [1, 2, 3].map(function(n) { return htmlEtapa(c, n); }).join('') + '</ol>' +
+      htmlAcciones(c);
+
+    $('rutaModalBody').querySelectorAll('[data-accion]').forEach(function(btn) {
+      btn.addEventListener('click', function() { accion(c, btn.getAttribute('data-accion'), btn); });
+    });
+
+    $('rutaModal').hidden = false;
+    document.querySelector('#rutaModal .modal-close').focus();
+    document.addEventListener('keydown', escCerrar);
+  }
+
+  function escCerrar(e) { if (e.key === 'Escape') cerrarDetalle(); }
+
+  function cerrarDetalle() {
+    $('rutaModal').hidden = true;
+    document.removeEventListener('keydown', escCerrar);
+    var fila = _abierto && document.querySelector('#rutaTabla tr[data-cedula="' + _abierto + '"]');
+    if (fila) fila.focus();
+    _abierto = null;
+  }
+
+  async function accion(c, tipo, btn) {
+    var nota = ($('rutaNota') || {}).value || '';
+    var original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Guardando…';
+
+    if (tipo === 'visita') {
+      btn.disabled = false;
+      btn.textContent = original;
+      cerrarDetalle();
+      Formularios.abrir(3, {
+        cedulaObjetivo: c.cedula,
+        subtitulo: 'Colaborador: ' + (c.nombre || c.cedula),
+        alGuardar: function() { load(); }
+      });
+      return;
+    }
+
+    try {
+      var r;
+      if (tipo === 'enviar') {
+        r = await Api.rutaEnviar(c.cedula);
+        if (!r.ok) throw new Error(r.error);
+        if (nota !== c.nota) await Api.rutaDecidir(c.cedula, c.decision || '', nota);
+        App.toast(c.etapa === 3 ? 'Aviso enviado' : 'Formulario ' + c.etapa + ' enviado', 'ok');
+      } else {
+        var decision = tipo === 'quitar' ? '' : tipo;
+        if (tipo.indexOf('cerrar') === 0 && !confirm('¿Cerrar el caso de ' + (c.nombre || c.cedula) + '?')) {
+          btn.disabled = false; btn.textContent = original;
+          return;
+        }
+        r = await Api.rutaDecidir(c.cedula, decision, nota);
+        if (!r.ok) throw new Error(r.error);
+        App.toast(tipo === 'quitar' ? 'Decisión manual quitada' : (tipo.indexOf('cerrar') === 0 ? 'Caso cerrado' : 'Caso escalado'), 'ok');
+      }
+      cerrarDetalle();
+      await load();
+    } catch (err) {
+      App.toast(err.message, 'error');
+      btn.disabled = false;
+      btn.textContent = original;
+    }
+  }
+
+  // ── Formulario pendiente de la persona (usuario o admin) ──
+  var _miFormulario = null;
+
+  /**
+   * Revisa si la persona tiene un formulario pendiente. Al entrar a la app
+   * (opciones.alEntrar) se abre encima de la vista de usuario.
+   */
+  async function cargarAvisoUsuario(opciones) {
+    opciones = opciones || {};
+    var u = App.get('user') || {};
+    if (!u.cedula && !u.email) return;
+    if (Formularios.abierto()) return;
+
+    try {
+      var r = await Api.rutaMiEstado();
+      var previo = $('rutaAvisoUsuario');
+      if (previo) previo.remove();
+      _miFormulario = (r.ok && r.data) ? r.data : null;
+
+      if (!_miFormulario) {
+        // Los administradores ven por qué no se abrió, para revisar la configuración
+        if (opciones.alEntrar && u.esAdmin && r.motivo) {
+          App.toast('Sin formulario pendiente para ti: ' + r.motivo, 'warn');
+        }
+        return;
+      }
+
+      pintarRecordatorio(_miFormulario);
+
+      // La vista de usuario queda de fondo y el formulario encima
+      var paginaGuia = $('page-guide');
+      if (paginaGuia && !paginaGuia.classList.contains('active')) Entrada.verComoUsuario();
+      abrirFormulario();
+    } catch (err) {
+      // Es complementario: si falla, la evaluación sigue igual
+      console.warn('[Ruta] formulario pendiente:', err);
+    }
+  }
+
+  function pintarRecordatorio(f) {
+    var pagina = $('page-guide');
+    if (!pagina || $('rutaAvisoUsuario')) return;
+
+    var aviso = document.createElement('div');
+    aviso.id = 'rutaAvisoUsuario';
+    aviso.className = 'card';
+    aviso.setAttribute('role', 'region');
+    aviso.setAttribute('aria-label', 'Formulario pendiente');
+    aviso.style.cssText = 'margin-bottom:1.25rem;border-left:4px solid var(--c-warn);padding:1rem 1.1rem;';
+    aviso.innerHTML =
+      '<p style="font-weight:700;margin-bottom:.25rem;">Tienes un formulario pendiente de Salud Organizacional</p>' +
+      '<p class="text-sm" style="color:var(--c-text-2);margin-bottom:.75rem;">' + esc(f.titulo) + '</p>' +
+      '<button class="btn btn-sm btn-primary" type="button" onclick="Ruta.abrirFormulario()">Diligenciar ahora</button>';
+    pagina.insertBefore(aviso, pagina.firstChild);
+  }
+
+  /** Abre el formulario que le toca a la persona; al enviarlo sigue con el próximo. */
+  function abrirFormulario() {
+    var f = _miFormulario;
+    if (!f) return;
+    Formularios.abrir(f.etapa, {
+      alGuardar: function(data) {
+        var previo = $('rutaAvisoUsuario');
+        if (previo) previo.remove();
+        _miFormulario = data.siguiente || null;
+        if (_miFormulario) {
+          pintarRecordatorio(_miFormulario);
+          App.toast('Con tus respuestas sigue un formulario más.', 'ok');
+          setTimeout(abrirFormulario, 1600);
+        }
+      }
+    });
+  }
+
+  function cerrarFormulario() {
+    Formularios.cerrar();
+  }
+
+  return {
+    load: load, syncNav: syncNav, verEtapa: verEtapa, limpiar: limpiar,
+    filtrar: filtrar, mostrarMas: mostrarMas,
+    abrirDetalle: abrirDetalle, cerrarDetalle: cerrarDetalle,
+    cargarAvisoUsuario: cargarAvisoUsuario,
+    abrirFormulario: abrirFormulario, cerrarFormulario: cerrarFormulario
+  };
+})();
+</script>

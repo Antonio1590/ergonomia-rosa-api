@@ -20,7 +20,10 @@ function handleUploadPhoto(params) {
   var file       = userFolder.createFile(blob);
 
   try {
-    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    // DOMAIN_WITH_LINK (no ANYONE_WITH_LINK): solo cuentas de Bolívar pueden
+    // ver la foto con el enlace, consistente con la confidencialidad que
+    // promete la pantalla de login.
+    file.setSharing(DriveApp.Access.DOMAIN_WITH_LINK, DriveApp.Permission.VIEW);
   } catch (_) {
     // Algunas cuentas corporativas restringen el uso compartido: no es crítico
   }

@@ -6,8 +6,6 @@
 
 var Questions = (function() {
 
-  // Valores por defecto: se asume la situación correcta y el
-  // usuario marca sólo lo que difiere.
   var DEFECTOS = {
     seatHeight:      'ok',
     feet:            'floor',
@@ -20,8 +18,6 @@ var Questions = (function() {
     duration:        '1to4'
   };
 
-  // Campos que la IA puede proponer; se resaltan para que el
-  // usuario sepa qué revisar.
   var PRELLENABLES = ['seatHeight', 'monitorHeight', 'backSupport', 'surfaceHigh'];
 
   function form() { return document.getElementById('questionForm'); }
@@ -38,8 +34,6 @@ var Questions = (function() {
     return !!el;
   }
 
-  // ── Abrir el ajuste manual desde los resultados ──────────
-  // El cuestionario es opcional: el análisis ya se calculó solo.
   function abrirAjuste() {
     var analysis = App.get('analysis');
     if (!analysis) { App.toast('No hay un análisis en curso', 'warn'); return; }
@@ -47,11 +41,9 @@ var Questions = (function() {
     App.goTo('questions');
   }
 
-  // ── Cargar el formulario con las respuestas vigentes ─────
   function prepare(analysis) {
     var r = analysis.respuestas || {};
 
-    // Refleja el estado actual del análisis, no valores en blanco
     Object.keys(DEFECTOS).forEach(function(k) {
       marcarRadio(k, r[k] !== undefined ? r[k] : DEFECTOS[k]);
     });
@@ -60,7 +52,6 @@ var Questions = (function() {
       if (typeof r[k] === 'boolean') marcarCheck(k, r[k]);
     });
 
-    // Señala lo que el análisis marcó como problema, para revisarlo primero
     var propuestos = [];
     if (r.seatHeight    && r.seatHeight    !== 'ok') propuestos.push('seatHeight');
     if (r.monitorHeight && r.monitorHeight !== 'ok') propuestos.push('monitorHeight');
@@ -73,7 +64,6 @@ var Questions = (function() {
     Quality.render(Quality.evaluar(analysis), 'qualityPanel');
   }
 
-  // Señala visualmente las respuestas que vienen del análisis
   function resaltarPropuestos(claves) {
     form().querySelectorAll('.q-item').forEach(function(item) {
       item.classList.remove('q-prefilled');
@@ -106,7 +96,6 @@ var Questions = (function() {
     }
   }
 
-  // Dibuja la foto con los puntos, como referencia mientras responde
   function dibujarReferencia(analysis) {
     var canvas = document.getElementById('questionCanvas');
     var img    = analysis.img;
@@ -124,7 +113,6 @@ var Questions = (function() {
     Analysis.dibujarPuntosNeutros(ctx, analysis.puntos, canvas.width, canvas.height);
   }
 
-  // ── Leer respuestas ──────────────────────────────────────
   function leer() {
     var f = form();
     var r = {};
@@ -135,8 +123,10 @@ var Questions = (function() {
       r[n] = sel ? sel.value : DEFECTOS[n];
     });
 
-    // "bad" y "none" se tratan igual en el puntaje del apoyabrazos
-    if (r.armrest !== 'ok') r.armrest = 'bad';
+    // (Se quitó el remapeo de "armrest" a 'bad': JS_Rosa.htlm solo distingue
+    // 'ok' de "cualquier otra cosa" para el puntaje, así que forzar el valor
+    // no aportaba nada — y en cambio hacía que "La silla no tiene" (value=
+    // 'none') se mostrara mal al reabrir "Ajustar las respuestas".)
 
     ['armrestHard','armrestWide','underDesk','surfaceHigh',
      'alturaNoAjustable','profundidadNoAjustable',
@@ -152,7 +142,6 @@ var Questions = (function() {
     return r;
   }
 
-  // ── Calcular y mostrar resultados ────────────────────────
   function submit() {
     var analysis = App.get('analysis');
     if (!analysis) { App.toast('No hay un análisis en curso', 'warn'); return; }

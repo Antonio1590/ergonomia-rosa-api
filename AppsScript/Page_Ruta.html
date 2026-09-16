@@ -1,0 +1,202 @@
+<div id="page-ruta" class="page">
+  <style>
+    .ruta-head {
+      display: flex; flex-wrap: wrap; gap: .75rem 1.5rem;
+      align-items: flex-end; justify-content: space-between;
+      margin-bottom: 1.5rem;
+    }
+    .ruta-head p { color: var(--c-text-2); font-size: .9rem; margin-top: .35rem; max-width: 60ch; }
+    .ruta-meta { font-size: .78rem; color: var(--c-text-3); margin-top: .35rem; }
+
+    /* Avisos de configuración */
+    .ruta-avisos { display: grid; gap: .5rem; margin-bottom: 1.25rem; }
+    .ruta-aviso {
+      font-size: .84rem; line-height: 1.45; padding: .7rem .9rem;
+      border-radius: var(--radius-sm); background: #FFF7E6; color: #7A4B00;
+      border-left: 4px solid var(--c-warn);
+    }
+    .ruta-aviso.error { background: #FDECEC; color: #8A1C1C; border-left-color: var(--c-error); }
+
+    /* Recorrido: la pieza central de la pantalla */
+    .ruta-pipeline {
+      list-style: none; display: grid;
+      grid-template-columns: .8fr 1fr 1fr 1fr .8fr;
+      margin-bottom: 1.5rem; position: relative;
+    }
+    .ruta-pipeline li { position: relative; }
+    .ruta-pipeline li + li::before {
+      content: ""; position: absolute; top: 27px; left: -50%; width: 100%; height: 3px;
+      background: var(--c-border); z-index: 0;
+    }
+    .ruta-paso {
+      position: relative; z-index: 1; width: 100%;
+      display: flex; flex-direction: column; align-items: center; gap: .3rem;
+      background: none; border: 0; cursor: pointer; font: inherit; color: inherit;
+      padding: 0 .35rem .6rem; border-radius: var(--radius-md); text-align: center;
+    }
+    .ruta-nodo {
+      width: 56px; height: 56px; border-radius: 50%;
+      display: grid; place-items: center;
+      background: var(--c-surface); border: 3px solid var(--c-border);
+      font-size: 1.35rem; font-weight: 800; color: var(--c-text);
+      font-variant-numeric: tabular-nums;
+      transition: border-color .15s, background .15s, color .15s;
+    }
+    .ruta-paso.filtro .ruta-nodo { border-color: var(--c-brand-md); }
+    .ruta-paso.tiene-vencidos .ruta-nodo { border-color: var(--c-error); }
+    .ruta-paso[aria-pressed="true"] .ruta-nodo { background: var(--c-brand); border-color: var(--c-brand); color: #fff; }
+    .ruta-paso[aria-pressed="true"] .ruta-nombre { color: var(--c-brand); }
+    .ruta-paso:hover .ruta-nodo { border-color: var(--c-brand); }
+    .ruta-etiqueta { font-size: .7rem; font-weight: 700; color: var(--c-brand-md); }
+    .ruta-nombre { font-size: .84rem; font-weight: 700; line-height: 1.25; }
+    .ruta-vencidos { font-size: .74rem; font-weight: 700; color: var(--c-error); min-height: 1.1em; }
+
+    /* Filtros de la tabla */
+    .ruta-filtros { display: flex; gap: .75rem; flex-wrap: wrap; align-items: flex-end; margin-bottom: .75rem; }
+    .ruta-filtros label { display: block; font-size: .75rem; color: var(--c-text-2); margin-bottom: .2rem; }
+
+    /* Tabla */
+    .ruta-persona strong { display: block; font-size: .86rem; }
+    .ruta-persona span { font-size: .75rem; color: var(--c-text-2); }
+    .ruta-track { display: inline-flex; gap: 4px; }
+    .ruta-track i { width: 22px; height: 8px; border-radius: 4px; background: var(--c-border); display: block; }
+    .ruta-track i.completado { background: var(--c-brand); }
+    .ruta-track i.pendiente  { background: var(--c-warn); }
+    .ruta-track i.vencido    { background: var(--c-error); }
+    .ruta-track i.programado { background: transparent; box-shadow: inset 0 0 0 2px var(--c-brand-md); }
+    .ruta-track i.omitido    { background: repeating-linear-gradient(45deg, var(--c-border) 0 3px, transparent 3px 6px); }
+    .ruta-sub { display: block; font-size: .72rem; color: var(--c-text-2); margin-top: .15rem; }
+    .ruta-vacio { text-align: center; padding: 2.5rem 1rem; color: var(--c-text-2); }
+
+    /* Detalle */
+    #rutaModalBody .modal-grid { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+    #rutaModalBody .modal-tile { text-align: left; padding: .6rem .75rem; }
+    #rutaModalBody .modal-tile-val { font-size: .88rem; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+    .ruta-etapas { list-style: none; display: grid; gap: .75rem; margin: 1rem 0; }
+    .ruta-etapa { border: 1px solid var(--c-border); border-radius: var(--radius-sm); padding: .8rem .9rem; }
+    .ruta-etapa.actual { border-color: var(--c-warn); box-shadow: inset 4px 0 0 var(--c-warn); }
+    .ruta-etapa-head { display: flex; justify-content: space-between; gap: .75rem; align-items: baseline; flex-wrap: wrap; }
+    .ruta-etapa-head h3 { font-size: .9rem; }
+    .ruta-etapa-info { font-size: .76rem; color: var(--c-text-2); margin-top: .2rem; }
+    .ruta-hallazgos { list-style: none; margin-top: .6rem; display: grid; gap: .3rem; }
+    .ruta-hallazgos li { font-size: .82rem; padding-left: 1.1rem; position: relative; line-height: 1.4; }
+    .ruta-hallazgos li::before {
+      content: ""; position: absolute; left: 0; top: .45em; width: 8px; height: 8px; border-radius: 50%;
+      background: var(--c-warn);
+    }
+    .ruta-hallazgos li.info { color: var(--c-text-2); }
+    .ruta-hallazgos li.info::before { background: var(--c-border); }
+    .ruta-hallazgos em { color: var(--c-text-2); }
+    .ruta-acciones { border-top: 1px solid var(--c-border); padding-top: 1rem; margin-top: .5rem; }
+    .ruta-acciones textarea { width: 100%; min-height: 64px; resize: vertical; font: inherit; }
+    .ruta-botones { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .75rem; }
+
+    @media (max-width: 720px) {
+      .ruta-pipeline { grid-template-columns: repeat(5, minmax(96px, 1fr)); overflow-x: auto; padding-bottom: .25rem; }
+      .ruta-nodo { width: 48px; height: 48px; font-size: 1.15rem; }
+      .ruta-pipeline li + li::before { top: 23px; }
+      .ruta-col-ingreso { display: none; }
+    }
+  </style>
+
+  <div class="ruta-head">
+    <div>
+      <h1>Ruta de ingreso</h1>
+      <p id="rutaIntro">Colaboradores nuevos según su fecha de inicio.</p>
+      <p class="ruta-meta" id="rutaMeta"></p>
+    </div>
+    <button class="btn btn-sm btn-outline" id="rutaBtnActualizar" onclick="Ruta.load()">Actualizar</button>
+  </div>
+
+  <div class="ruta-avisos" id="rutaAvisos"></div>
+
+  <ol class="ruta-pipeline" id="rutaPipeline" aria-label="Casos por etapa">
+    <li><button class="ruta-paso" data-vista="programado" aria-pressed="false" onclick="Ruta.verEtapa('programado')">
+      <span class="ruta-nodo" id="rutaCntProgramado">—</span>
+      <span class="ruta-etiqueta">&nbsp;</span>
+      <span class="ruta-nombre" id="rutaNombreProgramado">Aún no cumplen los días</span>
+      <span class="ruta-vencidos"></span>
+    </button></li>
+    <li><button class="ruta-paso filtro" data-vista="1" aria-pressed="false" onclick="Ruta.verEtapa('1')">
+      <span class="ruta-nodo" id="rutaCnt1">—</span>
+      <span class="ruta-etiqueta">Filtro 1</span>
+      <span class="ruta-nombre">Auto reporte</span>
+      <span class="ruta-vencidos" id="rutaVen1"></span>
+    </button></li>
+    <li><button class="ruta-paso filtro" data-vista="2" aria-pressed="false" onclick="Ruta.verEtapa('2')">
+      <span class="ruta-nodo" id="rutaCnt2">—</span>
+      <span class="ruta-etiqueta">Filtro 2</span>
+      <span class="ruta-nombre">Seguimiento uno a uno</span>
+      <span class="ruta-vencidos" id="rutaVen2"></span>
+    </button></li>
+    <li><button class="ruta-paso filtro" data-vista="3" aria-pressed="false" onclick="Ruta.verEtapa('3')">
+      <span class="ruta-nodo" id="rutaCnt3">—</span>
+      <span class="ruta-etiqueta">Filtro 3</span>
+      <span class="ruta-nombre">Visita virtual (IPT)</span>
+      <span class="ruta-vencidos" id="rutaVen3"></span>
+    </button></li>
+    <li><button class="ruta-paso" data-vista="cerrado" aria-pressed="false" onclick="Ruta.verEtapa('cerrado')">
+      <span class="ruta-nodo" id="rutaCntCerrado">—</span>
+      <span class="ruta-etiqueta">&nbsp;</span>
+      <span class="ruta-nombre">Cerrados</span>
+      <span class="ruta-vencidos"></span>
+    </button></li>
+  </ol>
+
+  <div class="ruta-filtros">
+    <div style="flex:1;min-width:180px;">
+      <label for="rutaBuscar">Buscar</label>
+      <input class="input" id="rutaBuscar" placeholder="Nombre o cédula" oninput="Ruta.filtrar()">
+    </div>
+    <div>
+      <label for="rutaEstado">Estado</label>
+      <select class="input" id="rutaEstado" style="width:auto;" onchange="Ruta.filtrar()">
+        <option value="">Todos</option>
+        <option value="vencido">Vencidos</option>
+        <option value="pendiente">Pendientes</option>
+        <option value="programado">Programados</option>
+        <option value="cerrado">Cerrados</option>
+        <option value="sin_fecha">Sin fecha de inicio</option>
+      </select>
+    </div>
+    <button class="btn btn-sm btn-outline" onclick="Ruta.limpiar()">Ver todos</button>
+  </div>
+
+  <p class="text-sm text-muted" id="rutaInfo" style="margin:.5rem 0;">Cargando…</p>
+
+  <div class="table-wrap">
+    <table class="data-table clickable-rows">
+      <thead>
+        <tr>
+          <th>Colaborador</th>
+          <th class="ruta-col-ingreso">Ingreso</th>
+          <th>Filtros</th>
+          <th>Estado</th>
+        </tr>
+      </thead>
+      <tbody id="rutaTabla">
+        <tr><td colspan="4" class="ruta-vacio">Cargando…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div style="text-align:center;margin-top:1rem;">
+    <button class="btn btn-sm btn-outline" id="rutaMas" hidden onclick="Ruta.mostrarMas()">Mostrar más</button>
+  </div>
+
+  <!-- Detalle del caso -->
+  <div class="modal-overlay" id="rutaModal" role="dialog" aria-modal="true"
+       aria-labelledby="rutaModalNombre" hidden
+       onclick="if (event.target === this) Ruta.cerrarDetalle();">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div>
+          <p class="modal-title" id="rutaModalNombre"></p>
+          <p class="modal-sub" id="rutaModalSub"></p>
+        </div>
+        <button class="modal-close" onclick="Ruta.cerrarDetalle()" aria-label="Cerrar detalle">✕</button>
+      </div>
+      <div class="modal-body" id="rutaModalBody"></div>
+    </div>
+  </div>
+</div>

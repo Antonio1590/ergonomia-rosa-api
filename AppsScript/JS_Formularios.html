@@ -1,0 +1,467 @@
+<script>
+// ============================================================
+// JS_Formularios — Formularios de la ruta de ingreso dentro de la app
+// Las preguntas vienen del servidor (Formularios.gs). El avance se guarda
+// en este navegador mientras se diligencia; las fotos se suben al enviar.
+// ============================================================
+
+var Formularios = (function() {
+  var _e = null;          // formulario abierto
+  var _urlsSubidas = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
+  var _tBorrador = null;
+
+  function $(id) { return document.getElementById(id); }
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  // ── Abrir ────────────────────────────────────────────────
+  /**
+   * n: 1, 2 o 3 · opciones: { cedulaObjetivo, subtitulo, alGuardar(data) }
+   */
+  async function abrir(n, opciones) {
+    opciones = opciones || {};
+    cerrar();
+    estilos();
+
+    var modal = document.createElement('div');
+    modal.id = 'fmModal';
+    modal.className = 'modal-overlay';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-labelledby', 'fmTitulo');
+    modal.innerHTML =
+      '<div class="modal-card fm-card">' +
+        '<div class="modal-head">' +
+          '<div>' +
+            '<p class="modal-sub" style="margin:0 0 .15rem;">Salud Organizacional · Filtro ' + n + '</p>' +
+            '<p class="modal-title" id="fmTitulo">Cargando formulario…</p>' +
+            (opciones.subtitulo ? '<p class="modal-sub" style="margin:.2rem 0 0;">' + esc(opciones.subtitulo) + '</p>' : '') +
+          '</div>' +
+          '<button class="modal-close" type="button" aria-label="Cerrar formulario">✕</button>' +
+        '</div>' +
+        '<div class="fm-cuerpo" id="fmCuerpo">' +
+          '<div class="fm-cargando"><div class="spinner-ring" aria-hidden="true"></div><p>Preparando las preguntas…</p></div>' +
+        '</div>' +
+        '<div class="fm-pie">' +
+          '<span class="fm-estado" id="fmEstado" role="status" aria-live="polite">Tu avance se guarda solo en este navegador.</span>' +
+          '<button class="btn btn-primary" type="button" id="fmEnviar" disabled>Enviar formulario</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(modal);
+    modal.querySelector('.modal-close').addEventListener('click', cerrar);
+    modal.querySelector('.modal-close').focus();
+
+    try {
+      var r = await Api.formularioEsquema(n, opciones.cedulaObjetivo);
+      if (!r.ok) throw new Error(r.error);
+      if (!$('fmModal')) return;
+
+      _e = {
+        n: n,
+        esquema: r.data,
+        opciones: opciones,
+        respuestas: {},
+        fotos: {},
+        clave: 'rosa_form_borrador_' + n + '_' + (r.data.contexto.cedula || 'x')
+      };
+      try { _e.respuestas = JSON.parse(localStorage.getItem(_e.clave) || '{}'); } catch (err) { _e.respuestas = {}; }
+
+      $('fmTitulo').textContent = r.data.titulo;
+      pintar();
+    } catch (err) {
+      $('fmCuerpo').innerHTML = '<div class="fm-cargando"><p>No se pudo abrir el formulario: ' + esc(err.message) + '</p></div>';
+    }
+  }
+
+  function cerrar() {
+    clearTimeout(_tBorrador);
+    if (_e) guardarBorrador();
+    var m = $('fmModal');
+    if (m) m.remove();
+    _e = null;
+  }
+
+  function abierto() { return !!$('fmModal'); }
+
+  // ── Pintar preguntas ─────────────────────────────────────
+  function pintar() {
+    var d = _e.esquema;
+    var html = '<form id="fmForm" novalidate onsubmit="return false;">';
+    if (d.intro) html += '<p class="fm-intro">' + esc(d.intro) + '</p>';
+    html += d.campos.map(campoHtml).join('');
+    html += '</form>';
+    $('fmCuerpo').innerHTML = html;
+
+    restaurar();
+    visibilidad();
+    progreso();
+
+    var form = $('fmForm');
+    form.addEventListener('input', alCambiar);
+    form.addEventListener('change', alCambiar);
+    form.querySelectorAll('input[type="file"]').forEach(function(inp) {
+      inp.addEventListener('change', alElegirFoto);
+    });
+    $('fmEnviar').disabled = false;
+    $('fmEnviar').onclick = enviar;
+  }
+
+  function envoltura(c, interior, etiquetaComoLegend) {
+    var si = c.si ? ' data-si-campo="' + esc(c.si.campo) + '" data-si-valor="' + esc(c.si.valor) + '"' : '';
+    var req = c.requerido ? ' <span class="fm-req" aria-hidden="true">*</span>' : '';
+    var titulo = c.etiqueta
+      ? (etiquetaComoLegend
+          ? '<legend class="fm-label">' + esc(c.etiqueta) + req + '</legend>'
+          : '<label class="fm-label" for="fm_' + esc(c.id) + '">' + esc(c.etiqueta) + req + '</label>')
+      : '';
+    var ayuda = c.ayuda ? '<p class="fm-ayuda">' + esc(c.ayuda) + '</p>' : '';
+    var tag = etiquetaComoLegend ? 'fieldset' : 'div';
+    return '<' + tag + ' class="fm-q" data-campo="' + esc(c.id) + '"' + si + '>' +
+      titulo + ayuda + interior + '<p class="fm-error-msg" hidden>Esta pregunta es obligatoria.</p></' + tag + '>';
+  }
+
+  function pastillas(nombre, opciones, tipo) {
+    return '<div class="fm-ops">' + opciones.map(function(op) {
+      return '<label class="fm-op"><input type="' + tipo + '" name="' + esc(nombre) + '" value="' + esc(op) + '"><span>' + esc(op) + '</span></label>';
+    }).join('') + '</div>';
+  }
+
+  function campoHtml(c) {
+    var ctx = _e.esquema.contexto;
+    switch (c.tipo) {
+      case 'seccion':
+        return '<h3 class="fm-seccion">' + esc(c.titulo) + '</h3>';
+      case 'nota':
+        return '<p class="fm-nota">' + esc(c.texto) + '</p>';
+      case 'autorizacion':
+        return '<div class="fm-q fm-aut" data-campo="aut">' +
+          '<details><summary>Autorización para el uso de datos personales (Ley 1581 de 2012)</summary><p>' + esc(c.texto) + '</p></details>' +
+          '<label class="fm-check"><input type="checkbox" name="aut" value="Acepto"> <span>Acepto el tratamiento de mis datos personales</span></label>' +
+          '<p class="fm-error-msg" hidden>Debes aceptar la autorización para continuar.</p></div>';
+      case 'fijo':
+        var valor = ctx[c.origen] || '—';
+        if (c.origen === 'cedula' && !_e.esquema.mostrarCedula) valor = 'Registrada en el sistema';
+        return '<div class="fm-q fm-fijo"><span class="fm-label">' + esc(c.etiqueta) + '</span><span class="fm-fijo-val">' + esc(valor) + '</span></div>';
+      case 'texto':
+      case 'correo':
+        return envoltura(c, '<input class="input" id="fm_' + esc(c.id) + '" name="' + esc(c.id) + '" type="' + (c.tipo === 'correo' ? 'email' : 'text') + '" maxlength="500">');
+      case 'numero':
+        return envoltura(c, '<input class="input" id="fm_' + esc(c.id) + '" name="' + esc(c.id) + '" type="text" inputmode="numeric" maxlength="20">');
+      case 'parrafo':
+        return envoltura(c, '<textarea class="input fm-area" id="fm_' + esc(c.id) + '" name="' + esc(c.id) + '" rows="3" maxlength="3000"></textarea>');
+      case 'opcion':
+        return envoltura(c, pastillas(c.id, c.opciones, 'radio'), true);
+      case 'casillas':
+        return envoltura(c, pastillas(c.id, c.opciones, 'checkbox'), true);
+      case 'cuadricula':
+        return envoltura(c, '<div class="fm-grid">' + c.filas.map(function(f) {
+          return '<div class="fm-fila" data-fila="' + esc(f.id) + '">' +
+            '<span class="fm-fila-txt">' + esc(f.etiqueta) + '</span>' + pastillas(f.id, c.opciones, 'radio') + '</div>';
+        }).join('') + '</div>', true);
+      case 'tablaSelects':
+        return envoltura(c, '<div class="fm-grid">' + c.filas.map(function(f) {
+          return '<div class="fm-fila">' +
+            '<span class="fm-fila-txt">' + esc(f.etiqueta) + '</span>' +
+            '<span class="fm-selects">' + c.columnas.map(function(col) {
+              return '<select class="input" name="' + esc(f.id + '_' + col.clave) + '" aria-label="' + esc(col.titulo + ' · ' + f.etiqueta) + '">' +
+                '<option value="">' + esc(col.titulo) + '</option>' +
+                col.opciones.map(function(op) { return '<option>' + esc(op) + '</option>'; }).join('') + '</select>';
+            }).join('') + '</span></div>';
+        }).join('') + '</div>', true);
+      case 'foto':
+        return envoltura(c,
+          '<div class="fm-fotos" data-foto="' + esc(c.id) + '" data-max="' + (c.max || 1) + '"></div>' +
+          '<label class="btn btn-sm btn-outline fm-foto-btn">' +
+            '<input type="file" accept="image/*" data-foto-input="' + esc(c.id) + '"' + ((c.max || 1) > 1 ? ' multiple' : '') + '>' +
+            'Agregar foto' + ((c.max || 1) > 1 ? 's (hasta ' + c.max + ')' : '') +
+          '</label>', true);
+    }
+    return '';
+  }
+
+  // ── Respuestas ───────────────────────────────────────────
+  function leerCampo(nombre) {
+    var form = $('fmForm');
+    var els = form.querySelectorAll('[name="' + nombre + '"]');
+    if (!els.length) return '';
+    var el = els[0];
+    if (el.type === 'radio') {
+      var marcado = form.querySelector('[name="' + nombre + '"]:checked');
+      return marcado ? marcado.value : '';
+    }
+    if (el.type === 'checkbox') {
+      return Array.prototype.filter.call(els, function(x) { return x.checked; })
+        .map(function(x) { return x.value; }).join('\n');
+    }
+    return el.value;
+  }
+
+  function alCambiar(ev) {
+    var t = ev.target;
+    if (!t.name || t.type === 'file') return;
+    _e.respuestas[t.name] = leerCampo(t.name);
+    var q = t.closest('.fm-q');
+    if (q) marcarError(q, false);
+    visibilidad();
+    progreso();
+    clearTimeout(_tBorrador);
+    _tBorrador = setTimeout(guardarBorrador, 500);
+  }
+
+  function restaurar() {
+    var form = $('fmForm');
+    Object.keys(_e.respuestas).forEach(function(nombre) {
+      var v = _e.respuestas[nombre];
+      if (v == null || v === '') return;
+      var els = form.querySelectorAll('[name="' + nombre + '"]');
+      Array.prototype.forEach.call(els, function(el) {
+        if (el.type === 'radio') el.checked = el.value === v;
+        else if (el.type === 'checkbox') el.checked = String(v).split('\n').indexOf(el.value) !== -1;
+        else el.value = v;
+      });
+    });
+    if (Object.keys(_e.respuestas).length) {
+      $('fmEstado').textContent = 'Recuperamos lo que llevabas. Las fotos debes agregarlas de nuevo.';
+    }
+  }
+
+  function guardarBorrador() {
+    if (!_e) return;
+    try { localStorage.setItem(_e.clave, JSON.stringify(_e.respuestas)); } catch (err) {}
+  }
+
+  function visible(c) {
+    if (!c.si) return true;
+    var v = String(_e.respuestas[c.si.campo] || '');
+    return v === c.si.valor || v.split('\n').indexOf(c.si.valor) !== -1;
+  }
+
+  function visibilidad() {
+    $('fmForm').querySelectorAll('[data-si-campo]').forEach(function(q) {
+      var v = String(_e.respuestas[q.getAttribute('data-si-campo')] || '');
+      var val = q.getAttribute('data-si-valor');
+      q.hidden = !(v === val || v.split('\n').indexOf(val) !== -1);
+    });
+  }
+
+  /** Obligatorias visibles: [{ q (elemento), completa }] */
+  function obligatorias() {
+    var form = $('fmForm');
+    var lista = [];
+    _e.esquema.campos.forEach(function(c) {
+      if (!visible(c)) return;
+      var q = form.querySelector('.fm-q[data-campo="' + c.id + '"]');
+      if (c.tipo === 'autorizacion') {
+        lista.push({ q: q, completa: _e.respuestas.aut === 'Acepto' });
+      } else if (c.requerido && c.tipo === 'cuadricula') {
+        lista.push({ q: q, completa: c.filas.every(function(f) { return !!_e.respuestas[f.id]; }) });
+      } else if (c.requerido && c.tipo === 'foto') {
+        lista.push({ q: q, completa: (_e.fotos[c.id] || []).length > 0 });
+      } else if (c.requerido && c.tipo !== 'fijo' && c.tipo !== 'tablaSelects') {
+        lista.push({ q: q, completa: !!String(_e.respuestas[c.id] || '').trim() });
+      }
+    });
+    return lista;
+  }
+
+  function progreso() {
+    var lista = obligatorias();
+    var hechas = lista.filter(function(x) { return x.completa; }).length;
+    if (!$('fmEstado').dataset.fijo) {
+      $('fmEstado').textContent = hechas + ' de ' + lista.length + ' preguntas obligatorias respondidas';
+    }
+  }
+
+  function marcarError(q, error) {
+    if (!q) return;
+    q.classList.toggle('fm-q-error', error);
+    var msg = q.querySelector('.fm-error-msg');
+    if (msg) msg.hidden = !error;
+  }
+
+  // ── Fotos ────────────────────────────────────────────────
+  function alElegirFoto(ev) {
+    var id = ev.target.getAttribute('data-foto-input');
+    var cont = $('fmForm').querySelector('[data-foto="' + id + '"]');
+    var max = Number(cont.getAttribute('data-max')) || 1;
+    var actuales = _e.fotos[id] || [];
+    var nuevas = Array.prototype.filter.call(ev.target.files, function(f) { return /^image\//.test(f.type); });
+
+    _e.fotos[id] = (max === 1 ? nuevas.slice(0, 1) : actuales.concat(nuevas)).slice(0, max);
+    if (actuales.length + nuevas.length > max && max > 1) App.toast('Máximo ' + max + ' fotos en esta pregunta', 'warn');
+    ev.target.value = '';
+    pintarFotos(id);
+    marcarError(cont.closest('.fm-q'), false);
+    progreso();
+  }
+
+  function pintarFotos(id) {
+    var cont = $('fmForm').querySelector('[data-foto="' + id + '"]');
+    cont.innerHTML = '';
+    (_e.fotos[id] || []).forEach(function(file, i) {
+      var url = URL.createObjectURL(file);
+      var item = document.createElement('div');
+      item.className = 'fm-foto';
+      item.innerHTML = '<img alt="Foto ' + (i + 1) + '" src="' + url + '">' +
+        '<button type="button" aria-label="Quitar foto ' + (i + 1) + '">✕</button>';
+      item.querySelector('button').addEventListener('click', function() {
+        _e.fotos[id].splice(i, 1);
+        URL.revokeObjectURL(url);
+        pintarFotos(id);
+        progreso();
+      });
+      cont.appendChild(item);
+    });
+  }
+
+  function comprimir(file) {
+    return new Promise(function(resolve) {
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function() {
+        var escala = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+        if (escala === 1 && file.size < 1500000) { URL.revokeObjectURL(url); return resolve(file); }
+        var canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.naturalWidth * escala);
+        canvas.height = Math.round(img.naturalHeight * escala);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(url);
+        canvas.toBlob(function(blob) {
+          resolve(blob && blob.size < file.size ? new File([blob], 'foto.jpg', { type: 'image/jpeg' }) : file);
+        }, 'image/jpeg', 0.85);
+      };
+      img.onerror = function() { URL.revokeObjectURL(url); resolve(file); };
+      img.src = url;
+    });
+  }
+
+  // ── Enviar ───────────────────────────────────────────────
+  async function enviar() {
+    if (!_e) return;
+    var btn = $('fmEnviar');
+    var estado = $('fmEstado');
+
+    var faltan = obligatorias().filter(function(x) { return !x.completa; });
+    document.querySelectorAll('.fm-q-error').forEach(function(q) { marcarError(q, false); });
+    if (faltan.length) {
+      faltan.forEach(function(x) { marcarError(x.q, true); });
+      if (faltan[0].q) faltan[0].q.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      App.toast('Te faltan ' + faltan.length + (faltan.length === 1 ? ' pregunta obligatoria' : ' preguntas obligatorias'), 'warn');
+      return;
+    }
+
+    btn.disabled = true;
+    estado.dataset.fijo = '1';
+    var abiertoAhora = _e;
+
+    try {
+      var respuestas = {};
+      Object.keys(_e.respuestas).forEach(function(k) { respuestas[k] = _e.respuestas[k]; });
+
+      // Fotos visibles: se suben a Drive y se guarda el enlace
+      var conFotos = _e.esquema.campos.filter(function(c) { return c.tipo === 'foto' && visible(c) && (_e.fotos[c.id] || []).length; });
+      var total = conFotos.reduce(function(s, c) { return s + _e.fotos[c.id].length; }, 0);
+      var subidas = 0;
+      for (var i = 0; i < conFotos.length; i++) {
+        var urls = [];
+        var archivos = _e.fotos[conFotos[i].id];
+        for (var j = 0; j < archivos.length; j++) {
+          subidas++;
+          btn.textContent = 'Subiendo foto ' + subidas + ' de ' + total + '…';
+          estado.textContent = 'No cierres esta ventana mientras se envía.';
+          var yaUrl = _urlsSubidas && _urlsSubidas.get(archivos[j]);
+          if (!yaUrl) {
+            var up = await Api.uploadPhoto(await comprimir(archivos[j]));
+            if (!up.ok) throw new Error('No se pudo subir una foto: ' + up.error);
+            yaUrl = up.data.url;
+            if (_urlsSubidas) _urlsSubidas.set(archivos[j], yaUrl);
+          }
+          urls.push(yaUrl);
+        }
+        respuestas[conFotos[i].id] = urls.join('\n');
+      }
+
+      btn.textContent = 'Enviando…';
+      var r = await Api.guardarFormulario(_e.n, respuestas, _e.opciones.cedulaObjetivo);
+      if (!r.ok) throw new Error(r.error);
+
+      try { localStorage.removeItem(abiertoAhora.clave); } catch (err) {}
+      var alGuardar = abiertoAhora.opciones.alGuardar;
+      _e = null;
+      var m = $('fmModal');
+      if (m) m.remove();
+      App.toast('¡Gracias! Recibimos tu formulario.', 'ok');
+      if (alGuardar) alGuardar(r.data || {});
+    } catch (err) {
+      if (!_e) return;
+      delete estado.dataset.fijo;
+      estado.textContent = err.message;
+      App.toast(err.message, 'error');
+      btn.disabled = false;
+      btn.textContent = 'Enviar formulario';
+    }
+  }
+
+  // ── Estilos ──────────────────────────────────────────────
+  function estilos() {
+    if ($('fmEstilos')) return;
+    var st = document.createElement('style');
+    st.id = 'fmEstilos';
+    st.textContent = [
+      '.fm-card{width:min(100%,780px);max-height:94vh;display:flex;flex-direction:column;overflow:hidden;}',
+      '.fm-cuerpo{flex:1;min-height:0;overflow-y:auto;padding:1rem 1.5rem 1.5rem;overscroll-behavior:contain;}',
+      '.fm-cargando{display:grid;place-items:center;gap:.75rem;padding:3rem 1rem;color:var(--c-text-2);text-align:center;}',
+      '.fm-cargando .spinner-ring{width:32px;height:32px;border-width:3px;}',
+      '.fm-intro{color:var(--c-text-2);font-size:.9rem;margin-bottom:.5rem;}',
+      '.fm-seccion{font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;color:var(--c-brand-md);margin:1.75rem 0 .25rem;padding-bottom:.4rem;border-bottom:2px solid var(--c-brand-lt);}',
+      '.fm-q{border:0;margin:0;padding:.85rem 0;min-width:0;}',
+      '.fm-q[hidden]{display:none!important;}',
+      '.fm-label{display:block;font-weight:600;font-size:.9rem;line-height:1.4;margin-bottom:.45rem;padding:0;color:var(--c-text);}',
+      '.fm-req{color:var(--c-error);}',
+      '.fm-ayuda{font-size:.8rem;color:var(--c-text-2);margin:-.2rem 0 .5rem;line-height:1.4;}',
+      '.fm-nota{font-size:.84rem;color:var(--c-text-2);background:var(--c-brand-lt);border-radius:var(--radius-sm);padding:.65rem .85rem;margin-top:1rem;}',
+      '.fm-area{min-height:80px;resize:vertical;font:inherit;}',
+      '.fm-ops{display:flex;flex-wrap:wrap;gap:.4rem;}',
+      '.fm-op{position:relative;cursor:pointer;}',
+      '.fm-op input{position:absolute;opacity:0;width:1px;height:1px;}',
+      '.fm-op span{display:inline-block;padding:.42rem .85rem;border:1.5px solid var(--c-border);border-radius:999px;font-size:.84rem;line-height:1.25;background:var(--c-surface);transition:background .12s,border-color .12s;}',
+      '.fm-op:hover span{border-color:var(--c-brand-md);}',
+      '.fm-op input:checked + span{background:var(--c-brand);border-color:var(--c-brand);color:#fff;}',
+      '.fm-op input:focus-visible + span{outline:3px solid #0F62D6;outline-offset:2px;}',
+      '.fm-grid{display:grid;border:1px solid var(--c-border);border-radius:var(--radius-sm);overflow:hidden;}',
+      '.fm-fila{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.5rem 1rem;padding:.6rem .8rem;}',
+      '.fm-fila:nth-child(even){background:var(--c-brand-lt);}',
+      '.fm-fila-txt{flex:1 1 280px;font-size:.85rem;line-height:1.4;}',
+      '.fm-selects{display:flex;gap:.4rem;flex:0 1 auto;}',
+      '.fm-selects select{width:auto;min-width:120px;padding:.35rem .5rem;font-size:.82rem;}',
+      '.fm-fijo{display:flex;justify-content:space-between;gap:1rem;padding:.55rem 0;border-bottom:1px dashed var(--c-border);}',
+      '.fm-fijo .fm-label{margin:0;font-weight:500;color:var(--c-text-2);}',
+      '.fm-fijo-val{font-weight:600;font-size:.9rem;text-align:right;overflow-wrap:anywhere;}',
+      '.fm-aut details{font-size:.8rem;color:var(--c-text-2);margin-bottom:.6rem;}',
+      '.fm-aut summary{cursor:pointer;color:var(--c-brand-md);font-weight:600;}',
+      '.fm-aut details p{margin-top:.4rem;line-height:1.45;}',
+      '.fm-check{display:flex;gap:.55rem;align-items:flex-start;font-weight:600;font-size:.9rem;cursor:pointer;}',
+      '.fm-check input{width:18px;height:18px;margin-top:.1rem;accent-color:var(--c-brand);}',
+      '.fm-fotos{display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:.5rem;}',
+      '.fm-fotos:empty{display:none;}',
+      '.fm-foto{position:relative;width:96px;height:96px;border-radius:var(--radius-sm);overflow:hidden;border:1px solid var(--c-border);}',
+      '.fm-foto img{width:100%;height:100%;object-fit:cover;display:block;}',
+      '.fm-foto button{position:absolute;top:4px;right:4px;width:24px;height:24px;border-radius:50%;border:0;background:rgba(0,0,0,.65);color:#fff;cursor:pointer;font-size:.75rem;}',
+      '.fm-foto-btn{position:relative;cursor:pointer;}',
+      '.fm-foto-btn input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;}',
+      '.fm-q-error .fm-label,.fm-q-error .fm-check{color:var(--c-error);}',
+      '.fm-q-error .fm-grid,.fm-q-error > .input{border-color:var(--c-error);}',
+      '.fm-error-msg{color:var(--c-error);font-size:.78rem;margin-top:.35rem;}',
+      '.fm-pie{display:flex;gap:.75rem;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:.8rem 1.5rem;border-top:1px solid var(--c-border);background:var(--c-surface);}',
+      '.fm-estado{font-size:.8rem;color:var(--c-text-2);flex:1 1 220px;}',
+      '@media (max-width:600px){.fm-card{max-height:100vh;}.fm-cuerpo{padding:.75rem 1rem 1.25rem;}.fm-pie{padding:.7rem 1rem;}',
+        '.fm-pie .btn{width:100%;}.fm-selects{width:100%;}.fm-selects select{flex:1;min-width:0;}}'
+    ].join('');
+    document.head.appendChild(st);
+  }
+
+  return { abrir: abrir, cerrar: cerrar, abierto: abierto };
+})();
+</script>

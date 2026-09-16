@@ -2,16 +2,50 @@
 // ============================================================
 // JS_Api — Llamadas al servidor via google.script.run
 // Todas las funciones retornan Promise<{ok, data?, error?}>
+// La identidad la decide el servidor (cuenta de Google); el navegador
+// solo envía la cédula cuando Google no identifica a la persona.
 // ============================================================
 
 var Api = (function() {
 
+  var CLAVE_TOKEN = 'rosa_token_admin';
+
+  function token() {
+    try { return sessionStorage.getItem(CLAVE_TOKEN) || ''; } catch (e) { return ''; }
+  }
+
+  function setToken(t) {
+    try { if (t) sessionStorage.setItem(CLAVE_TOKEN, t); else sessionStorage.removeItem(CLAVE_TOKEN); } catch (e) {}
+  }
+
+  function usuario() {
+    return (typeof App !== 'undefined' && App.get && App.get('user')) || {};
+  }
+
   // Wrapper genérico: llama rpcHandler(params) en el servidor
+  var CLAVE_DISPOSITIVO = 'rosa_admin_dispositivo';
+
+  function dispositivo() {
+    try { return localStorage.getItem(CLAVE_DISPOSITIVO) || ''; } catch (e) { return ''; }
+  }
+
+  function setDispositivo(t) {
+    try { if (t) localStorage.setItem(CLAVE_DISPOSITIVO, t); else localStorage.removeItem(CLAVE_DISPOSITIVO); } catch (e) {}
+  }
+
   function call(params) {
+    var t = token();
+    if (t) params.token = t;
+    var d = dispositivo();
+    if (d) params.dispositivo = d;
     return new Promise(function(resolve, reject) {
       google.script.run
         .withSuccessHandler(function(result) {
-          // El servidor siempre retorna { ok, data?, error? }
+          if (result && result.codigo === 'SESION') {
+            setToken('');
+            App.toast(result.error, 'warn');
+            Entrada.iniciar();
+          }
           resolve(result);
         })
         .withFailureHandler(function(err) {
@@ -32,41 +66,67 @@ var Api = (function() {
   }
 
   return {
-    login: function(email, cedula) {
-      return call({ action: 'login', email: email, cedula: cedula });
+    setToken: setToken,
+    setDispositivo: setDispositivo,
+    tieneDispositivo: function() { return !!dispositivo(); },
+    olvidarDispositivo: function() {
+      var p = call({ action: 'olvidarDispositivo' });
+      setDispositivo('');
+      return p;
     },
 
-    saveEvaluation: function(record) {
-      return call({ action: 'saveEvaluation', record: record });
+    // ── Entrada ──
+    iniciar: function() {
+      return call({ action: 'iniciar' });
+    },
+    identificarCedula: function(cedula) {
+      return call({ action: 'identificarCedula', cedula: cedula });
+    },
+    adminPedirCodigo: function(email) {
+      return call({ action: 'adminPedirCodigo', email: email });
+    },
+    adminVerificarCodigo: function(email, codigo) {
+      return call({ action: 'adminVerificarCodigo', email: email, codigo: codigo });
     },
 
+    // ── Evaluación ROSA ──
+    saveEvaluation: async function(record) {
+      var u = await Entrada.asegurarIdentidad();
+      record.email  = u.email  || '';
+      record.nombre = u.nombre || '';
+      record.cedula = u.cedula || '';
+      var r = await call({ action: 'saveEvaluation', record: record });
+      // Ya guardada la evaluación, si tiene un formulario pendiente se le abre
+      if (r && r.ok) setTimeout(function() { Ruta.cargarAvisoUsuario(); }, 900);
+      return r;
+    },
     getEvaluations: function() {
       return call({ action: 'getEvaluations' });
     },
-
-    getUserHistory: function(email) {
-      return call({ action: 'getUserHistory', email: email });
+    getUserHistory: async function(email) {
+      var u = usuario();
+      if (!u.esAdmin) u = await Entrada.asegurarIdentidad();
+      return call({ action: 'getUserHistory', email: email || u.email, cedula: u.cedula });
     },
-
     getUsers: function() {
       return call({ action: 'getUsers' });
     },
-
     saveTraining: function(record) {
+      var u = usuario();
+      if (!record.email) record.email = u.email || u.cedula || '';
       return call({ action: 'saveTraining', record: record });
     },
-
-    uploadPhoto: async function(file, email) {
+    uploadPhoto: async function(file) {
+      var u = await Entrada.asegurarIdentidad();
       var base64 = await fileToBase64(file);
       return call({
         action:        'uploadPhoto',
-        email:         email,
+        email:         u.email || u.cedula,
         nombreArchivo: file.name || ('foto-' + Date.now() + '.jpg'),
         mimeType:      file.type || 'image/jpeg',
         base64:        base64
       });
     },
-
     // El análisis corre en el servidor: la clave de Gemini nunca
     // llega al navegador.
     analizarFoto: async function(file) {
@@ -76,6 +136,30 @@ var Api = (function() {
         mimeType: file.type || 'image/jpeg',
         base64:   base64
       });
+    },
+
+    // ── Ruta de ingreso ──
+    rutaListar: function() {
+      return call({ action: 'rutaListar' });
+    },
+    rutaDecidir: function(cedula, decision, nota) {
+      return call({ action: 'rutaDecidir', cedula: cedula, decision: decision, nota: nota });
+    },
+    rutaEnviar: function(cedula) {
+      return call({ action: 'rutaEnviar', cedula: cedula });
+    },
+    formularioEsquema: function(n, cedulaObjetivo) {
+      return call({ action: 'formularioEsquema', n: n, cedulaObjetivo: cedulaObjetivo || '' });
+    },
+    guardarFormulario: function(n, respuestas, cedulaObjetivo) {
+      return call({ action: 'guardarFormulario', n: n, respuestas: respuestas, cedulaObjetivo: cedulaObjetivo || '' });
+    },
+    diagnostico: function() {
+      return call({ action: 'diagnostico' });
+    },
+    rutaMiEstado: function() {
+      var u = usuario();
+      return call({ action: 'rutaMiEstado', cedula: u.cedula || '', email: u.email || '' });
     }
   };
 })();

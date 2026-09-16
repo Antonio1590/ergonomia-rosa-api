@@ -1,0 +1,258 @@
+<script>
+// ============================================================
+// JS_Entrada — La app abre directo, sin pantalla de ingreso.
+// El servidor reconoce a la persona por su cuenta de Google; si no
+// puede, entra igual y la cédula se pide una sola vez al guardar.
+// ============================================================
+
+var Entrada = (function() {
+  var CLAVE_CEDULA = 'rosa_cedula';
+
+  function $(id) { return document.getElementById(id); }
+
+  function leerCedula() {
+    try { return localStorage.getItem(CLAVE_CEDULA) || ''; } catch (e) { return ''; }
+  }
+  function guardarCedula(c) {
+    try { if (c) localStorage.setItem(CLAVE_CEDULA, c); else localStorage.removeItem(CLAVE_CEDULA); } catch (e) {}
+  }
+
+  // ── Arranque ─────────────────────────────────────────────
+  async function iniciar() {
+    App.goTo('login');
+    $('adminPanel').hidden = true;
+    $('entradaSalida').hidden = true;
+    $('entradaCargando').hidden = false;
+    $('entradaReintentar').hidden = true;
+    $('entradaMensaje').textContent = 'Abriendo la aplicación…';
+
+    try {
+      var r = await Api.iniciar();
+      if (!r.ok) throw new Error(r.error);
+      var user = r.data;
+      if (user.dispositivoInvalido) Api.setDispositivo('');
+      delete user.dispositivoInvalido;
+
+      // Quien no es reconocido por Google pero ya dio su cédula antes
+      if (user.fuente === 'anonimo') {
+        var ced = leerCedula();
+        if (ced) {
+          var idc = await Api.identificarCedula(ced);
+          if (idc.ok) { user.cedula = idc.data.cedula; user.nombre = idc.data.nombre; user.email = idc.data.email; }
+          else guardarCedula('');
+        }
+      }
+      aplicar(user);
+      if (typeof ROSA_DIAG !== 'undefined' && ROSA_DIAG) mostrarDiagnostico();
+    } catch (err) {
+      $('entradaMensaje').textContent = 'No se pudo abrir la aplicación: ' + err.message;
+      $('entradaReintentar').hidden = false;
+    }
+  }
+
+  /** Deja la sesión lista y lleva a la pantalla que corresponde. */
+  function aplicar(user) {
+    App.saveSession(user);
+    syncNav();
+
+    if (user.esAdmin) {
+      verComoAdmin();
+    } else {
+      verComoUsuario();
+    }
+    // Admin o usuario: si tiene un formulario pendiente, se abre encima
+    // de la vista de usuario apenas entra
+    Ruta.cargarAvisoUsuario({ alEntrar: true });
+  }
+
+  /** Vista de usuario: su evaluación, historial y formularios pendientes. */
+  function verComoUsuario() {
+    App.goTo('guide');
+    Guide.initGuidePage();
+    syncNav();
+  }
+
+  /** Vista de administrador: ruta de ingreso de todos los colaboradores. */
+  function verComoAdmin() {
+    var u = App.get('user') || {};
+    if (!u.esAdmin) return verComoUsuario();
+    App.goTo('ruta');
+    Ruta.load();
+    syncNav();
+  }
+
+  function syncNav() {
+    var u = App.get('user') || {};
+    var navUser = $('navUser');
+    if (navUser) navUser.textContent = u.nombre || '';
+    if ($('btnRuta')) $('btnRuta').hidden = !u.esAdmin;
+    if ($('btnDashboard')) $('btnDashboard').hidden = !u.esAdmin;
+    if ($('btnAdminAcceso')) $('btnAdminAcceso').hidden = u.fuente !== 'anonimo';
+    if ($('btnSalir')) $('btnSalir').hidden = false;
+    if ($('btnMiEvaluacion')) $('btnMiEvaluacion').hidden = !u.esAdmin;
+  }
+
+  /** Recuadro con cómo reconoce la app a quien entra (abrir con ?diag=1). */
+  async function mostrarDiagnostico() {
+    var caja = document.createElement('div');
+    caja.setAttribute('role', 'status');
+    caja.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:9999;max-width:min(92vw,420px);' +
+      'background:#111827;color:#F9FAFB;border-radius:12px;padding:14px 16px;font:13px/1.5 monospace;' +
+      'box-shadow:0 10px 30px rgba(0,0,0,.35);white-space:pre-wrap;';
+    caja.textContent = 'Diagnóstico: consultando…';
+    document.body.appendChild(caja);
+    try {
+      var r = await Api.diagnostico();
+      if (!r.ok) throw new Error(r.error);
+      var d = r.data;
+      caja.textContent =
+        'DIAGNÓSTICO ROSA EXPERT\n' +
+        'Versión:           ' + d.version + '\n' +
+        'Correo de Google:  ' + d.correoQueEntregaGoogle + '\n' +
+        'Reconocido como:   ' + d.reconocidoComo + '\n' +
+        'Nombre:            ' + (d.nombre || '—') + '\n' +
+        'Administrador:     ' + (d.esAdmin ? 'SÍ' : 'NO') + '\n' +
+        'Formulario pend.:  ' + (d.tieneFormularioPendiente ? 'SÍ' : 'NO');
+    } catch (err) {
+      caja.textContent = 'Diagnóstico no disponible: ' + err.message;
+    }
+  }
+
+  // ── Administradores que Google no reconoce ───────────────
+  function abrirAdmin() {
+    App.goTo('login');
+    $('entradaSalida').hidden = true;
+    $('entradaCargando').hidden = true;
+    $('adminPanel').hidden = false;
+    $('adminEmail').focus();
+  }
+
+  function volver() {
+    $('adminPanel').hidden = true;
+    var u = App.get('user');
+    if (u) verComoUsuario();
+    else iniciar();
+  }
+
+  function salirAdmin() {
+    if (Api.tieneDispositivo()) Api.olvidarDispositivo();
+    Api.setToken('');
+    iniciar();
+  }
+
+  /**
+   * Salir: olvida en este navegador el acceso de administrador por código
+   * y la cédula guardada. Quien entra con su cuenta de Google volverá a
+   * ser reconocido al abrir la app de nuevo.
+   */
+  function salir() {
+    var u = App.get('user') || {};
+    if (Api.tieneDispositivo()) Api.olvidarDispositivo();
+    Api.setToken('');
+    guardarCedula('');
+    try {
+      Object.keys(sessionStorage).forEach(function(k) {
+        if (k.indexOf('rosa_form_visto_') === 0) sessionStorage.removeItem(k);
+      });
+    } catch (e) {}
+    Ruta.cerrarFormulario();
+    var aviso = $('rutaAvisoUsuario');
+    if (aviso) aviso.remove();
+
+    App.set('user', null);
+    App.goTo('login');
+    $('adminPanel').hidden = true;
+    $('entradaCargando').hidden = true;
+    $('entradaSalida').hidden = false;
+    $('entradaSalidaNota').textContent = u.fuente === 'google'
+      ? 'Cuando vuelvas a abrir la app entrarás con tu cuenta de Google (' + u.email + '). Para usar otra cuenta, cierra sesión en Google o abre una ventana de incógnito.'
+      : (u.fuente === 'codigo'
+          ? 'Este navegador ya no te recuerda como administrador: la próxima vez te pediremos un código.'
+          : 'Tus datos ya no quedan guardados en este navegador.');
+  }
+
+  // ── Cédula: solo cuando hace falta ───────────────────────
+  var _pendiente = null;
+
+  /**
+   * Devuelve el usuario con cédula o correo. Si Google no lo identificó
+   * y aún no ha dado su cédula, la pide en un cuadro (una sola vez).
+   */
+  function asegurarIdentidad() {
+    var u = App.get('user') || {};
+    if (u.email || u.cedula) return Promise.resolve(u);
+    if (_pendiente) return _pendiente;
+
+    _pendiente = new Promise(function(resolve, reject) {
+      var modal = document.createElement('div');
+      modal.className = 'modal-overlay';
+      modal.setAttribute('role', 'dialog');
+      modal.setAttribute('aria-modal', 'true');
+      modal.setAttribute('aria-labelledby', 'cedTitulo');
+      modal.innerHTML =
+        '<div class="modal-card" style="max-width:420px;">' +
+          '<div class="modal-head"><div>' +
+            '<p class="modal-title" id="cedTitulo">¿Cuál es tu cédula?</p>' +
+            '<p class="modal-sub">La usamos para guardar tu evaluación a tu nombre. Solo te la pedimos esta vez.</p>' +
+          '</div></div>' +
+          '<div class="modal-body">' +
+            '<div class="field"><label for="cedInput" class="solo-lectores">Número de cédula</label>' +
+            '<input class="input" id="cedInput" type="text" inputmode="numeric" autocomplete="off" placeholder="Sin puntos ni espacios"></div>' +
+            '<p class="field-error" id="cedError" role="alert" style="display:none;margin-top:.5rem;"></p>' +
+            '<div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem;">' +
+              '<button class="btn btn-outline" type="button" id="cedCancelar">Cancelar</button>' +
+              '<button class="btn btn-primary" type="button" id="cedOk">Continuar</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(modal);
+
+      var input = modal.querySelector('#cedInput');
+      var btn   = modal.querySelector('#cedOk');
+      var error = modal.querySelector('#cedError');
+      input.focus();
+
+      function cerrar() { modal.remove(); _pendiente = null; }
+
+      async function confirmar() {
+        var ced = input.value.replace(/\D/g, '');
+        error.style.display = 'none';
+        if (!ced) { error.textContent = 'Escribe tu número de cédula'; error.style.display = 'block'; return; }
+        btn.disabled = true; btn.textContent = 'Verificando…';
+        try {
+          var r = await Api.identificarCedula(ced);
+          if (!r.ok) throw new Error(r.error);
+          var user = App.get('user') || {};
+          user.cedula = r.data.cedula;
+          user.nombre = r.data.nombre;
+          user.email  = r.data.email;
+          App.saveSession(user);
+          guardarCedula(r.data.cedula);
+          syncNav();
+          cerrar();
+          resolve(user);
+        } catch (err) {
+          error.textContent = err.message;
+          error.style.display = 'block';
+          btn.disabled = false; btn.textContent = 'Continuar';
+        }
+      }
+
+      btn.addEventListener('click', confirmar);
+      input.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); confirmar(); } });
+      modal.querySelector('#cedCancelar').addEventListener('click', function() {
+        cerrar();
+        reject(new Error('Necesitamos tu cédula para continuar'));
+      });
+    });
+    return _pendiente;
+  }
+
+  return {
+    iniciar: iniciar, aplicar: aplicar, syncNav: syncNav,
+    verComoUsuario: verComoUsuario, verComoAdmin: verComoAdmin,
+    abrirAdmin: abrirAdmin, volver: volver, salirAdmin: salirAdmin, salir: salir,
+    asegurarIdentidad: asegurarIdentidad
+  };
+})();
+</script>

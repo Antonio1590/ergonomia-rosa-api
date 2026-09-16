@@ -1,90 +1,89 @@
 <div id="page-login" class="page">
-  <div class="login-shell">
-    <div class="login-card">
+  <style>
+    .entrada-wrapper {
+      min-height: 100vh;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 2.5rem 1rem;
+      background: linear-gradient(180deg, rgba(0, 128, 68, 0.04) 0%, rgba(255, 255, 255, 1) 100%);
+      text-align: center;
+    }
+    .entrada-title { color: #008044; font-size: 2rem; font-weight: 900; line-height: 1.2; margin: .75rem 0 .35rem; }
+    .entrada-sub { font-size: 1rem; color: #4A5568; font-weight: 500; }
+    .entrada-card {
+      width: min(100%, 420px); background: #fff; border-radius: 16px; text-align: left;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08); border: 1px solid rgba(0, 128, 68, 0.12);
+      padding: 2rem 1.75rem; margin-top: 1.75rem;
+    }
+    .entrada-card h2 { font-size: 1.1rem; margin-bottom: .35rem; color: #1A202C; }
+    .entrada-card .hint { font-size: .82rem; color: #64748B; margin-top: .35rem; line-height: 1.4; }
+    .admin-code { letter-spacing: .4em; font-size: 1.25rem; text-align: center; font-weight: 700; }
+  </style>
 
-      <!-- Fondo: degradado + formas difuminadas, sin imágenes externas -->
-      <div class="login-bg" aria-hidden="true">
-        <span class="login-blob login-blob-1"></span>
-        <span class="login-blob login-blob-2"></span>
-        <span class="login-blob login-blob-3"></span>
-        <svg class="login-art" viewBox="0 0 220 190" aria-hidden="true">
-          <line x1="60" y1="176" x2="210" y2="176" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
-          <rect x="118" y="120" width="86" height="6" rx="3" stroke="#fff" stroke-width="2" fill="none"/>
-          <rect x="196" y="126" width="6" height="50" rx="2.5" stroke="#fff" stroke-width="2" fill="none"/>
-          <rect x="146" y="66" width="52" height="38" rx="4" stroke="#fff" stroke-width="2" fill="none"/>
-          <line x1="172" y1="104" x2="172" y2="120" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
-          <line x1="158" y1="120" x2="186" y2="120" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
-          <path d="M78 176 L78 140 Q78 128 90 128 L100 128" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/>
-          <rect x="68" y="176" width="44" height="6" rx="3" stroke="#fff" stroke-width="2" fill="none"/>
-          <circle cx="98" cy="96" r="12" stroke="#fff" stroke-width="2" fill="none"/>
-          <path d="M86 128 Q98 108 110 128 L108 150 Q98 158 88 150 Z" stroke="#fff" stroke-width="2" fill="none"/>
-          <path d="M108 130 L128 118" stroke="#fff" stroke-width="2" stroke-linecap="round" fill="none"/>
-        </svg>
-      </div>
+  <div class="entrada-wrapper">
+    <svg width="72" height="72" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+      <circle cx="32" cy="32" r="32" fill="#008044"/>
+      <path d="M16 46 Q32 18 48 46" stroke="#fff" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+      <circle cx="32" cy="22" r="5.5" fill="#FFDC5D"/>
+      <path d="M22 40 Q32 30 42 40" stroke="#FFDC5D" stroke-width="2" fill="none" stroke-linecap="round"/>
+    </svg>
+    <h1 class="entrada-title">ROSA Expert</h1>
+    <p class="entrada-sub">Análisis Ergonómico de Puesto de Trabajo (APT)</p>
 
-      <div class="login-grid">
+    <!-- Mientras se abre la app: no pide nada -->
+    <div id="entradaCargando" style="margin-top:1.75rem;" role="status" aria-live="polite">
+      <div class="spinner-ring" style="width:34px;height:34px;border-width:3px;margin:0 auto .75rem;" aria-hidden="true"></div>
+      <p class="text-sm text-muted" id="entradaMensaje">Abriendo la aplicación…</p>
+      <button class="btn btn-sm btn-outline mt-4" id="entradaReintentar" hidden onclick="Entrada.iniciar()">Intentar de nuevo</button>
+    </div>
 
-        <!-- Columna izquierda: marca + confianza -->
-        <div class="login-brand">
-          <div class="login-brand-top">
-            <span class="login-mark">R</span>
-            <span class="login-brand-name">ROSA Expert</span>
+    <!-- Después de salir -->
+    <div class="entrada-card" id="entradaSalida" hidden style="text-align:center;">
+      <h2>Saliste de ROSA Expert</h2>
+      <p class="hint" id="entradaSalidaNota" style="margin:.5rem 0 1.25rem;"></p>
+      <p class="hint" style="margin-bottom:1.25rem;">Ya puedes cerrar esta pestaña.</p>
+      <button class="btn btn-primary btn-full" type="button" onclick="Entrada.iniciar()"
+              style="background-color:#008044;border-color:#008044;">
+        Volver a entrar
+      </button>
+    </div>
+
+    <!-- Solo para administradores que Google no reconoce -->
+    <div class="entrada-card" id="adminPanel" hidden>
+      <h2>Acceso de administrador</h2>
+      <p class="hint" style="margin-bottom:1rem;">Te enviamos un código a tu correo. Solo se pide la primera vez en este navegador: después entras directo.</p>
+
+      <form id="adminForm" onsubmit="return false;">
+        <div id="adminPasoCorreo">
+          <div class="field">
+            <label for="adminEmail" style="font-weight:600;color:#2D3748;">Correo de administrador</label>
+            <input class="input" id="adminEmail" type="email" autocomplete="email" placeholder="nombre@correo.com">
           </div>
-
-          <div class="login-headline">
-            <h1>Bienvenido<br>de nuevo</h1>
-            <p>Evaluación ergonómica con IA, pensada para ayudarte.</p>
-          </div>
-
-          <div class="login-trust">
-            <div class="trust-row">
-              <span class="trust-icon" title="Análisis local" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none"><rect x="5" y="11" width="14" height="9" rx="2" stroke="currentColor" stroke-width="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4" stroke="currentColor" stroke-width="2" fill="none"/></svg>
-              </span>
-              <span class="trust-icon" title="Uso confidencial" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z" stroke="currentColor" stroke-width="2" fill="none"/></svg>
-              </span>
-              <span class="trust-icon" title="Acceso controlado" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              </span>
-            </div>
-            <p class="trust-note">Fotos y resultados de uso confidencial, dentro de un entorno controlado.</p>
-          </div>
+          <button class="btn btn-primary btn-full mt-4" type="button" id="btnPedirCodigo"
+                  onclick="Guide.pedirCodigo()" style="background-color:#008044;border-color:#008044;">
+            Enviar código
+          </button>
         </div>
 
-        <!-- Columna derecha: formulario -->
-        <div class="login-form-col">
-          <div class="login-form-wrap">
-
-            <div class="login-divider"><span></span><h2>Iniciar sesión</h2><span></span></div>
-
-            <form id="loginForm" onsubmit="return false;">
-              <div class="login-field">
-                <label for="loginCedula">Número de cédula</label>
-                <input class="login-input" id="loginCedula" type="tel"
-                       inputmode="numeric" pattern="[0-9]{6,12}"
-                       placeholder="Ej: 1023456789" autocomplete="off" required>
-              </div>
-
-              <div class="login-field mt-5">
-                <label for="loginEmail">Correo corporativo</label>
-                <input class="login-input" id="loginEmail" type="email"
-                       placeholder="nombre@segurosbolivar.com" autocomplete="email" required>
-              </div>
-
-              <p class="field-error login-error" id="loginError" style="display:none;"></p>
-
-              <button class="login-submit" type="submit" id="btnLogin"
-                      onclick="Guide.handleLogin()">
-                Ingresar
-              </button>
-            </form>
-
-            <p class="login-footnote">Acceso restringido a usuarios autorizados por Seguros Bolívar</p>
+        <div id="adminPasoCodigo" hidden>
+          <div class="field">
+            <label for="adminCodigo" style="font-weight:600;color:#2D3748;">Código de 6 dígitos</label>
+            <input class="input admin-code" id="adminCodigo" type="text" inputmode="numeric"
+                   autocomplete="one-time-code" maxlength="6" placeholder="000000" aria-describedby="adminCodigoHint">
+            <p class="hint" id="adminCodigoHint"></p>
           </div>
+          <button class="btn btn-primary btn-full mt-4" type="button" id="btnVerificarCodigo"
+                  onclick="Guide.verificarCodigo()" style="background-color:#008044;border-color:#008044;">
+            Abrir panel
+          </button>
+          <button class="link-btn mt-4" type="button" onclick="Guide.cambiarCorreoAdmin()">Usar otro correo</button>
         </div>
 
-      </div>
+        <p class="field-error" id="adminError" role="alert" style="display:none;margin-top:.75rem;"></p>
+      </form>
+
+      <button class="btn btn-ghost btn-full mt-4" type="button" onclick="Entrada.volver()" style="color:#4A5568;">
+        Volver a la evaluación
+      </button>
     </div>
   </div>
 </div>

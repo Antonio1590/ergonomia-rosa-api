@@ -1,48 +1,76 @@
 <script>
 // ============================================================
-// JS_Guide — Lógica de la página de guía: login, foto, cámara
+// JS_Guide — Lógica de la página de guía: foto, cámara y acceso admin
 // ============================================================
 
 var Guide = (function() {
 
-  // ── Login ────────────────────────────────────────────────
-  async function handleLogin() {
-    var email  = document.getElementById('loginEmail').value.trim();
-    var cedula = document.getElementById('loginCedula').value.trim();
-    var errEl  = document.getElementById('loginError');
-    var btn    = document.getElementById('btnLogin');
+  // ── Acceso de administrador por código ───────────────────
+  // Solo lo usan los admins que Google no reconoce automáticamente.
+  function errorAdmin(msg) {
+    var el = document.getElementById('adminError');
+    el.textContent   = msg || '';
+    el.style.display = msg ? 'block' : 'none';
+  }
 
-    errEl.style.display = 'none';
-
-    if (!email || !cedula) {
-      showError('Completa todos los campos');
-      return;
-    }
+  async function pedirCodigo() {
+    var email = document.getElementById('adminEmail').value.trim().toLowerCase();
+    var btn   = document.getElementById('btnPedirCodigo');
+    errorAdmin('');
+    if (!email) { errorAdmin('Escribe tu correo'); return; }
 
     btn.disabled    = true;
-    btn.textContent = 'Verificando…';
-
+    btn.textContent = 'Enviando…';
     try {
-      var result = await Api.login(email, cedula);
-      if (!result.ok) {
-        showError(result.error || 'Credenciales incorrectas');
-      } else {
-        App.saveSession(result.data);
-        App.goTo('guide');
-        initGuidePage();
-      }
+      var r = await Api.adminPedirCodigo(email);
+      if (!r.ok) { errorAdmin(r.error); return; }
+      document.getElementById('adminPasoCorreo').hidden = true;
+      document.getElementById('adminPasoCodigo').hidden = false;
+      document.getElementById('adminCodigoHint').textContent =
+        r.data.mensaje + ' Revisa también la carpeta de spam.';
+      document.getElementById('adminCodigo').value = '';
+      document.getElementById('adminCodigo').focus();
     } catch (err) {
-      showError('Error de conexión: ' + err.message);
+      errorAdmin('Error de conexión: ' + err.message);
     } finally {
       btn.disabled    = false;
-      btn.textContent = 'Ingresar';
+      btn.textContent = 'Enviar código';
     }
   }
 
-  function showError(msg) {
-    var el = document.getElementById('loginError');
-    el.textContent   = msg;
-    el.style.display = 'block';
+  async function verificarCodigo() {
+    var email  = document.getElementById('adminEmail').value.trim().toLowerCase();
+    var codigo = document.getElementById('adminCodigo').value.replace(/\D/g, '');
+    var btn    = document.getElementById('btnVerificarCodigo');
+    errorAdmin('');
+    if (codigo.length !== 6) { errorAdmin('El código tiene 6 dígitos'); return; }
+
+    btn.disabled    = true;
+    btn.textContent = 'Verificando…';
+    try {
+      var r = await Api.adminVerificarCodigo(email, codigo);
+      if (!r.ok) { errorAdmin(r.error); return; }
+      Api.setToken(r.data.token);
+      if (r.data.dispositivo) Api.setDispositivo(r.data.dispositivo);
+      var user = r.data;
+      delete user.token;
+      delete user.dispositivo;
+      user.fuente = 'codigo';
+      document.getElementById('adminPanel').hidden = true;
+      Entrada.aplicar(user);
+    } catch (err) {
+      errorAdmin('Error de conexión: ' + err.message);
+    } finally {
+      btn.disabled    = false;
+      btn.textContent = 'Abrir panel';
+    }
+  }
+
+  function cambiarCorreoAdmin() {
+    errorAdmin('');
+    document.getElementById('adminPasoCodigo').hidden = true;
+    document.getElementById('adminPasoCorreo').hidden = false;
+    document.getElementById('adminEmail').focus();
   }
 
   // ── Fotos de guía ────────────────────────────────────────
@@ -243,7 +271,8 @@ var Guide = (function() {
   }
 
   return {
-    handleLogin, initGuidePage, onPhotoError,
+    pedirCodigo, verificarCodigo, cambiarCorreoAdmin,
+    initGuidePage, onPhotoError,
     onDragOver, onDragLeave, onDrop,
     openGallery, openCamera, onFileSelected,
     setPhoto, clearPhoto, startNew,

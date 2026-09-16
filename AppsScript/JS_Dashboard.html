@@ -12,70 +12,37 @@ var Dashboard = (function() {
   // ── Cargar datos ─────────────────────────────────────────
   async function load() {
     document.getElementById('dashTableBody').innerHTML =
-      '<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--c-text-3);">Cargando…</td></tr>';
+      '<tr><td colspan="5" style="text-align:center;padding:2.5rem 1rem;">' +
+        '<div class="spinner-ring" style="width:30px;height:30px;border-width:3px;margin:0 auto .75rem;" aria-hidden="true"></div>' +
+        '<span style="display:block;color:var(--c-text-3);font-size:.85rem;">Cargando evaluaciones…</span>' +
+      '</td></tr>';
 
     try {
-      var results  = await Promise.all([Api.getEvaluations(), Api.getUsers()]);
-      var evalRes  = results[0];
-      var usersRes = results[1];
-      if (!evalRes.ok) throw new Error(evalRes.error);
-
-      _all      = (evalRes.data || []).reverse();  // más reciente primero
+      var result = await Api.getEvaluations();
+      if (!result.ok) throw new Error(result.error);
+      _all      = (result.data || []).reverse();  // más reciente primero
       _filtered = _all;
       _page     = 0;
-
-      var users = (usersRes.ok && Array.isArray(usersRes.data)) ? usersRes.data : [];
-      renderBento(users);
+      renderStats();
       renderUrgentCases();
       renderCharts();
       renderTable();
     } catch (err) {
       App.toast('Error cargando evaluaciones: ' + err.message, 'error');
+      document.getElementById('dashTableBody').innerHTML =
+        '<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--c-text-3);">No se pudo cargar.</td></tr>';
     }
   }
 
-  // ── Resumen "bento": puntaje más reciente, KPIs y salud ──
-  function renderBento(users) {
+  // ── Estadísticas ─────────────────────────────────────────
+  function renderStats() {
     var total  = _all.length;
     var high   = _all.filter(function(r){ return r.nivelRiesgo === 'Alto' || r.nivelRiesgo === 'Muy Alto'; }).length;
     var scores = _all.map(function(r){ return Number(r.puntajeFinal) || 0; }).filter(Boolean);
     var avg    = scores.length ? (scores.reduce(function(a,b){ return a+b; }, 0) / scores.length).toFixed(1) : '—';
-
-    document.getElementById('statUsers').textContent = users.length;
     document.getElementById('statTotal').textContent = total;
     document.getElementById('statHigh').textContent  = high;
     document.getElementById('statAvg').textContent   = avg;
-
-    // _all viene del más reciente al más viejo: el primero es "el último"
-    var last = total ? _all[0] : null;
-    var numEl   = document.getElementById('bentoScoreNum');
-    var badgeEl = document.getElementById('bentoScoreBadge');
-    var footEl  = document.getElementById('bentoScoreFoot');
-
-    if (last) {
-      var cfg = riskCfg(last.nivelRiesgo);
-      numEl.textContent   = last.puntajeFinal;
-      numEl.style.color   = cfg.hex;
-      badgeEl.textContent = last.nivelRiesgo;
-      badgeEl.className   = 'badge ' + cfg.badge;
-      footEl.textContent  = 'Última evaluación registrada: ' + new Date(last.fecha).toLocaleDateString('es-CO');
-    } else {
-      numEl.textContent   = '—';
-      numEl.style.color   = 'var(--c-text-3)';
-      badgeEl.textContent = 'Sin datos';
-      badgeEl.className   = 'badge badge-gray';
-      footEl.textContent  = 'Sin evaluaciones aún';
-    }
-
-    var coverage = Math.min(total * 10, 100);
-    var activo   = users.length > 0 ? Math.min(Math.round(total / users.length * 100), 100) : 0;
-    setHealth('healthCoverage', coverage);
-    setHealth('healthActive', activo);
-  }
-
-  function setHealth(prefix, pct) {
-    document.getElementById(prefix + 'Pct').textContent = pct + '%';
-    document.getElementById(prefix + 'Fill').style.width = pct + '%';
   }
 
   // ── Gráficas ─────────────────────────────────────────────
@@ -280,27 +247,63 @@ var Dashboard = (function() {
     return 'Muy Alto';
   }
 
+  // Convierte un Date a "YYYY-MM-DD" en hora local (no UTC), para que
+  // coincida con lo que el navegador guarda en un <input type="date">.
+  function fechaISOLocal(d) {
+    var mes = String(d.getMonth() + 1).padStart(2, '0');
+    var dia = String(d.getDate()).padStart(2, '0');
+    return d.getFullYear() + '-' + mes + '-' + dia;
+  }
+
   // ── Filtrado ─────────────────────────────────────────────
   function filter() {
-    var q    = (document.getElementById('dashSearch').value || '').toLowerCase();
-    var risk = document.getElementById('dashRisk').value;
+    var q     = (document.getElementById('dashSearch').value || '').toLowerCase();
+    var risk  = document.getElementById('dashRisk').value;
+    var desde = document.getElementById('dashDesde').value;
+    var hasta = document.getElementById('dashHasta').value;
 
     _filtered = _all.filter(function(r) {
       var matchQ = !q || (r.email || '').toLowerCase().includes(q)
                        || (r.nombre || '').toLowerCase().includes(q);
       var matchR = !risk || r.nivelRiesgo === risk;
-      return matchQ && matchR;
+
+      var matchFecha = true;
+      if (desde || hasta) {
+        if (!r.fecha) return false;
+        var f = new Date(r.fecha);
+        if (isNaN(f)) return false;
+        var fISO = fechaISOLocal(f);
+        if (desde && fISO < desde) matchFecha = false;
+        if (hasta && fISO > hasta) matchFecha = false;
+      }
+
+      return matchQ && matchR && matchFecha;
     });
     _page = 0;
     renderTable();
   }
 
+  function limpiarFiltros() {
+    document.getElementById('dashSearch').value = '';
+    document.getElementById('dashRisk').value = '';
+    document.getElementById('dashDesde').value = '';
+    document.getElementById('dashHasta').value = '';
+    filter();
+  }
+
   // ── Renderizar tabla ─────────────────────────────────────
   function renderTable() {
-    var tbody  = document.getElementById('dashTableBody');
-    var pages  = document.getElementById('dashPages');
-    var start  = _page * PAGE_SIZE;
-    var slice  = _filtered.slice(start, start + PAGE_SIZE);
+    var tbody = document.getElementById('dashTableBody');
+    var pages = document.getElementById('dashPages');
+    var info  = document.getElementById('dashResultsInfo');
+    var start = _page * PAGE_SIZE;
+    var slice = _filtered.slice(start, start + PAGE_SIZE);
+
+    if (info) {
+      info.textContent = _filtered.length
+        ? 'Mostrando ' + (start + 1) + '–' + (start + slice.length) + ' de ' + _filtered.length + ' evaluaciones'
+        : 'Sin resultados para este filtro';
+    }
 
     if (slice.length === 0) {
       tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--c-text-3);">Sin resultados</td></tr>';
@@ -330,16 +333,34 @@ var Dashboard = (function() {
       tr.addEventListener('click', function() { abrirDetalle(slice[idx]); });
     });
 
-    // Paginación
+    // Paginación: Anterior · hasta 5 números centrados en la página actual · Siguiente
     var totalPages = Math.ceil(_filtered.length / PAGE_SIZE);
     pages.innerHTML = '';
-    for (var i = 0; i < totalPages; i++) {
+    if (totalPages <= 1) return;
+
+    function botonPagina(etiqueta, pagina, activo, deshabilitado) {
       var btn = document.createElement('button');
-      btn.className = 'btn btn-sm ' + (i === _page ? 'btn-primary' : 'btn-outline');
-      btn.textContent = i + 1;
-      btn.onclick = (function(p){ return function(){ _page = p; renderTable(); }; })(i);
-      pages.appendChild(btn);
+      btn.className = 'btn btn-sm ' + (activo ? 'btn-primary' : 'btn-outline');
+      btn.textContent = etiqueta;
+      btn.disabled = !!deshabilitado;
+      btn.onclick = function() {
+        _page = pagina;
+        renderTable();
+        var wrap = document.getElementById('dashTableWrap');
+        if (wrap) window.scrollTo({ top: wrap.offsetTop - 80, behavior: 'smooth' });
+      };
+      return btn;
     }
+
+    pages.appendChild(botonPagina('‹ Anterior', Math.max(0, _page - 1), false, _page === 0));
+
+    var desdeN = Math.max(0, Math.min(_page - 2, totalPages - 5));
+    var hastaN = Math.min(totalPages, desdeN + 5);
+    for (var i = desdeN; i < hastaN; i++) {
+      pages.appendChild(botonPagina(String(i + 1), i, i === _page, false));
+    }
+
+    pages.appendChild(botonPagina('Siguiente ›', Math.min(totalPages - 1, _page + 1), false, _page === totalPages - 1));
   }
 
   // ── Exportar CSV ─────────────────────────────────────────
@@ -365,6 +386,6 @@ var Dashboard = (function() {
     URL.revokeObjectURL(url);
   }
 
-  return { load, filter, exportCSV, abrirDetalle, cerrarDetalle };
+  return { load, filter, limpiarFiltros, exportCSV, abrirDetalle, cerrarDetalle };
 })();
 </script>

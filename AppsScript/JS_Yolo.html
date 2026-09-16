@@ -1,0 +1,143 @@
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/ort.min.js"></script>
+<script>
+// ============================================================
+// JS_Yolo — Detección de objetos con YOLOv8n (ONNX Runtime Web)
+// Clases: chair, desk, document_holder, laptop, monitor,
+//         mouse, person, phone
+// ============================================================
+
+var Yolo = (function() {
+  // ── Configuración ────────────────────────────────────────
+  // IMPORTANTE: actualiza STATIC_BASE si cambias el host de Netlify
+  var STATIC_BASE  = 'https://famous-tartufo-04dba5.netlify.app';
+  var MODEL_URL    = STATIC_BASE + '/best.onnx';
+  var ORT_CDN      = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/';
+  var INPUT_SIZE   = 640;
+  var CONF_THRESH  = 0.35;
+  var IOU_THRESH   = 0.45;
+
+  var CLASSES = ['chair','desk','document_holder','laptop','monitor','mouse','person','phone'];
+  var LABELS  = {
+    chair:           'Silla',
+    desk:            'Escritorio',
+    document_holder: 'Portadocumentos',
+    laptop:          'Portátil',
+    monitor:         'Monitor',
+    mouse:           'Mouse',
+    person:          'Persona',
+    phone:           'Teléfono'
+  };
+
+  var _session = null;
+
+  // ── Inicialización ───────────────────────────────────────
+  async function init() {
+    if (_session) return _session;
+
+    // Apps Script no sirve encabezados SharedArrayBuffer, usar hilo único
+    ort.env.wasm.wasmPaths  = ORT_CDN;
+    ort.env.wasm.numThreads = 1;
+
+    _session = await ort.InferenceSession.create(MODEL_URL, {
+      executionProviders: ['wasm']
+    });
+    return _session;
+  }
+
+  // ── Pre-procesado ────────────────────────────────────────
+  function preprocess(img) {
+    var canvas = document.createElement('canvas');
+    canvas.width  = INPUT_SIZE;
+    canvas.height = INPUT_SIZE;
+    var ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, INPUT_SIZE, INPUT_SIZE);
+    var data = ctx.getImageData(0, 0, INPUT_SIZE, INPUT_SIZE).data;
+
+    var f32 = new Float32Array(3 * INPUT_SIZE * INPUT_SIZE);
+    var n   = INPUT_SIZE * INPUT_SIZE;
+    for (var i = 0; i < n; i++) {
+      f32[i]         = data[i * 4]     / 255;  // R
+      f32[i + n]     = data[i * 4 + 1] / 255;  // G
+      f32[i + n * 2] = data[i * 4 + 2] / 255;  // B
+    }
+
+    return {
+      tensor:  new ort.Tensor('float32', f32, [1, 3, INPUT_SIZE, INPUT_SIZE]),
+      scaleX:  img.naturalWidth  / INPUT_SIZE,
+      scaleY:  img.naturalHeight / INPUT_SIZE
+    };
+  }
+
+  // ── NMS ─────────────────────────────────────────────────
+  function iou(a, b) {
+    var xA = Math.max(a[0], b[0]), yA = Math.max(a[1], b[1]);
+    var xB = Math.min(a[0]+a[2], b[0]+b[2]), yB = Math.min(a[1]+a[3], b[1]+b[3]);
+    var inter = Math.max(0, xB-xA) * Math.max(0, yB-yA);
+    return inter / (a[2]*a[3] + b[2]*b[3] - inter);
+  }
+
+  function nms(dets) {
+    var sorted = dets.slice().sort(function(a,b){ return b.confidence - a.confidence; });
+    var kept = [];
+    for (var i = 0; i < sorted.length; i++) {
+      var d = sorted[i];
+      var box = [d.x, d.y, d.width, d.height];
+      if (!kept.some(function(k){ return k.classId === d.classId && iou(box,[k.x,k.y,k.width,k.height]) > IOU_THRESH; })) {
+        kept.push(d);
+      }
+    }
+    return kept;
+  }
+
+  // ── Post-procesado ───────────────────────────────────────
+  function postprocess(output, scaleX, scaleY) {
+    var data = output.data;
+    var dims = output.dims;
+    // Detectar formato automáticamente:
+    // Formato A (clásico): [1, numFields, numAnchors]
+    // Formato B (reciente): [1, numAnchors, numFields]
+    var fmtA     = dims[1] < dims[2];
+    var nAnchors = fmtA ? dims[2] : dims[1];
+    var nFields  = fmtA ? dims[1] : dims[2];
+    var nClasses = nFields - 4;
+    var dets = [];
+
+    for (var a = 0; a < nAnchors; a++) {
+      var cx = fmtA ? data[0*nAnchors+a] : data[a*nFields+0];
+      var cy = fmtA ? data[1*nAnchors+a] : data[a*nFields+1];
+      var w  = fmtA ? data[2*nAnchors+a] : data[a*nFields+2];
+      var h  = fmtA ? data[3*nAnchors+a] : data[a*nFields+3];
+      var maxConf = 0, classId = 0;
+      for (var c = 0; c < nClasses; c++) {
+        var conf = fmtA ? data[(4+c)*nAnchors+a] : data[a*nFields+4+c];
+        if (conf > maxConf) { maxConf = conf; classId = c; }
+      }
+      if (maxConf < CONF_THRESH || classId >= CLASSES.length) continue;
+      dets.push({
+        classId, className: CLASSES[classId], label: LABELS[CLASSES[classId]],
+        confidence: maxConf,
+        x: (cx - w/2) * scaleX, y: (cy - h/2) * scaleY,
+        width: w * scaleX, height: h * scaleY
+      });
+    }
+    return nms(dets);
+  }
+
+  // ── Detección pública ────────────────────────────────────
+  async function detect(imgElement) {
+    try {
+      var { tensor, scaleX, scaleY } = preprocess(imgElement);
+      var sess    = await init();
+      var feeds   = {};
+      feeds[sess.inputNames[0]] = tensor;
+      var results = await sess.run(feeds);
+      return postprocess(results[sess.outputNames[0]], scaleX, scaleY);
+    } catch (err) {
+      console.warn('[YOLO] Error en detección:', err.message);
+      return [];
+    }
+  }
+
+  return { init, detect, CLASSES, LABELS };
+})();
+</script>

@@ -7,7 +7,7 @@
 
   // Plantillas y módulos que la app necesita para funcionar.
   // Pose se omite: es un módulo ES y se carga de forma diferida.
-  var PANTALLAS = ['login', 'guide', 'questions', 'results', 'history', 'dashboard'];
+  var PANTALLAS = ['login', 'guide', 'questions', 'results', 'history', 'dashboard', 'ruta'];
   var MODULOS   = {
     'Photos':    'Photos',
     'Api':       'JS_Api',
@@ -19,7 +19,10 @@
     'Guide':     'JS_Guide',
     'Charts':    'JS_Charts',
     'History':   'JS_History',
-    'Dashboard': 'JS_Dashboard'
+    'Dashboard': 'JS_Dashboard',
+    'Formularios': 'JS_Formularios',
+    'Ruta':      'JS_Ruta',
+    'Entrada':   'JS_Entrada'
   };
 
   // Verifica la integridad antes de navegar: así un archivo mal
@@ -71,28 +74,22 @@
 
     if (!revisarInstalacion()) return;
 
-    if (App.loadSession()) {
-      App.goTo('guide');
-      Guide.initGuidePage();
-
-      var usuario = App.get('user');
-      if (window.location.hash === '#dashboard' && usuario && usuario.esAdmin) {
-        App.goTo('dashboard');
-        Dashboard.load();
-      }
-    } else {
-      App.goTo('login');
-    }
+    // Sin pantalla de ingreso: el servidor reconoce a la persona y
+    // la app abre directo en la evaluación (o en el panel si es admin).
+    Entrada.iniciar();
 
     var btnDash = document.getElementById('btnDashboard');
     if (btnDash) {
       btnDash.addEventListener('click', function() { Dashboard.load(); });
     }
 
-    var form = document.getElementById('loginForm');
-    if (form) {
-      form.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') { e.preventDefault(); Guide.handleLogin(); }
+    var adminForm = document.getElementById('adminForm');
+    if (adminForm) {
+      adminForm.addEventListener('keydown', function(e) {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        if (document.getElementById('adminPasoCodigo').hidden) Guide.pedirCodigo();
+        else Guide.verificarCodigo();
       });
     }
 

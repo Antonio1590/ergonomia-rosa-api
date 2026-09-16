@@ -39,6 +39,13 @@ function handleSaveEvaluation(record) {
     record.nombre || '',
     record.cedula || ''
   ]);
+  // --- correos automáticos (no deben tumbar el guardado) ---
+  var fila = sheet.getLastRow();
+  try {
+    enviarCorreosRosa(_recordARosa(record, fila), fila);
+  } catch (err) {
+    Logger.log('Correos ROSA: ' + err);
+  }
 
   return { ok: true };
 }
